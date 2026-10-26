@@ -161,6 +161,7 @@ type
     Align:    integer;
     Text:     UTF8String;
     Writable: boolean; // true -> add a blink char (|) at the end
+    MinSize:  integer; // smallest size before a long text is cut (0: none)
     //Reflection
     Reflection:           boolean;
     ReflectionSpacing:    real;
@@ -243,6 +244,8 @@ type
     SBGDColR, SBGDColG, SBGDColB, SBGDInt:    real;
     STColR,  STColG,  STColB,  STInt:     real;
     STDColR, STDColG, STDColB, STDInt:    real;
+    STUColR, STUColG, STUColB:            real;
+    UseSTUColor:                          boolean;
     SkipX:    integer;
   end;
 
@@ -318,6 +321,8 @@ type
     PlayerScrollAvatar: record
       NumAvatars: integer;
       DistanceAvatars: integer;
+      Reflection: boolean; // mirror effect under the avatars of the carousel
+      Show: boolean;       // false: no avatar pictures, players only by colour
     end;
 
     PlayerAvatar:        TThemeButton;
@@ -358,6 +363,18 @@ type
     //Rap Icons
     RapIcon:          TThemeStatic;
     RapToFreestyleIcon: TThemeStatic;
+
+    // list mode: details of the selected song (title, artist, year, icons);
+    // the other modes use TextTitle etc. for that
+    HasDetail:        boolean;
+    TextInfo:         TThemeText;   // genre, language, edition of the song
+    DetailTitle, DetailArtist, DetailYear: TThemeText;
+    DetailVideoIcon, DetailMedleyIcon, DetailCalculatedMedleyIcon,
+    DetailDuetIcon, DetailRapIcon, DetailRapToFreestyleIcon: TThemeStatic;
+    // icons of the selected song placed one after the other (only the shown
+    // ones): 0 off, 1 from VideoIcon.X to the right, 2 centred on it
+    IconFlow:         integer;
+    IconGap:          integer;
 
     //Show Cat in TopLeft Mod
     TextCat:          TThemeText;
@@ -531,6 +548,40 @@ type
 
     InfoMessageText: TThemeText;
     InfoMessageBG:   TThemeStatic;
+
+    // Geometry of the note lanes. The "Top" values are historically named:
+    // they are the baseline the notes are drawn upwards from.
+    NoteArea: record
+      Left, Right: integer;
+      LineSpacing, LineSpacing3: integer;   // 1-2 rows, 3 rows
+      Top1Row: integer;
+      Top2Rows1, Top2Rows2: integer;
+      Top3Rows1, Top3Rows2, Top3Rows3: integer;
+      NoteScale: real;                      // size of the notes
+      NoteCapScale: real;                   // width of the rounded note ends
+      LineAlpha: real;                      // note guide lines
+      LineColR, LineColG, LineColB: real;
+      Left3, Right3: integer;               // lanes with 3 or more players
+      // optional background of each lane in use (texture tinted by a colour)
+      LaneTex: string;
+      LaneLeft, LaneRight: integer;
+      LanePadTop, LanePadBottom: integer;
+      LaneColR, LaneColG, LaneColB, LaneAlpha: real;
+      // optional score card at the left end of each lane (same colour)
+      HudTex: string;
+      HudW: integer;
+      HudAlpha: real;
+      LanePad3: integer;                    // side room of the 3-row veils
+    end;
+
+    // optional geometry of the line bonus popup, relative to the score
+    // background. H = 0 keeps the classic popup (same size as the score bg)
+    LineBonus: record
+      W, H: integer;          // W = 0: width of the score background
+      Y: integer;             // top, relative to the score background top
+      Size: integer;          // font size
+      Font, Style: integer;
+    end;
   end;
 
   TThemeJukebox = class(TThemeBasic)
@@ -1120,6 +1171,9 @@ type
     Filename: IPath;
     DefaultSkin: integer;
     Creator: string;
+    RenderW: integer; // virtual canvas the theme is laid out on
+    KeepAspect: boolean; // draw with bars instead of stretching the canvas
+    RenderH: integer;
   end;
 
   TThemeSection = record
@@ -1240,6 +1294,7 @@ type
     procedure ThemeLoadEqualizer(var ThemeEqualizer: TThemeEqualizer; const Name: string);
     procedure ThemeLoadPosition(var ThemePosition: TThemePosition; const Name: string);
     procedure ThemeLoadLyricBar(var LyricBar: TThemeLyricBar; const Name: string);
+    procedure ThemeLoadSingNoteArea;
 
     procedure ThemeScoreLoad;
     procedure ThemePartyLoad;
@@ -1393,6 +1448,9 @@ begin
   Entry.BaseTheme := Ini.ReadString('Theme', 'BaseTheme', '');
   ThemeVersion := Trim(UpperCase(Ini.ReadString('Theme', 'US_Version', 'no version tag')));
   Entry.Creator := Ini.ReadString('Theme', 'Creator', 'Unknown');
+  Entry.RenderW := Ini.ReadInteger('Theme', 'RenderWidth', 800);
+  Entry.RenderH := Ini.ReadInteger('Theme', 'RenderHeight', 600);
+  Entry.KeepAspect := Ini.ReadBool('Theme', 'KeepAspect', false);
   SkinName := Ini.ReadString('Theme', 'DefaultSkin', FileName.SetExtension('').ToNative);
 
   Ini.Free;
@@ -1489,6 +1547,8 @@ begin
   if Themes[ThemeNum].FileName.IsFile() then
   begin
     Result := true;
+    // the theme decides the size of the virtual canvas (4:3 or widescreen)
+    SetRenderSize(Themes[ThemeNum].RenderW, Themes[ThemeNum].RenderH, Themes[ThemeNum].KeepAspect);
     OpenFile(ThemeNum);
     if ThemeIni.ReadString('Theme', 'Name', '') <> '' then
     begin
@@ -1557,6 +1617,8 @@ begin
       IniFile := ResolveThemeFile('NamePlayerScrollAvatar');
       Name.PlayerScrollAvatar.NumAvatars := IniFile.ReadInteger('NamePlayerScrollAvatar', 'Count', 5);
       Name.PlayerScrollAvatar.DistanceAvatars := IniFile.ReadInteger('NamePlayerScrollAvatar', 'Distance', 40);
+      Name.PlayerScrollAvatar.Reflection := IniFile.ReadBool('NamePlayerScrollAvatar', 'Reflection', true);
+      Name.PlayerScrollAvatar.Show := IniFile.ReadBool('NamePlayerScrollAvatar', 'Show', true);
 
       ThemeLoadButton(Name.PlayerAvatar, 'NamePlayerAvatar');
 
@@ -1697,6 +1759,8 @@ begin
 
       ThemeLoadText (Sing.InfoMessageText, 'SingInfoMessageText');
       ThemeLoadStatic (Sing.InfoMessageBG, 'SingInfoMessageBG');
+
+      ThemeLoadSingNoteArea;
 
       ThemeLoadSingPlayerStatics(Sing.Solo1PP1, 'P1');
 
@@ -2292,6 +2356,66 @@ begin
   Result := DefaultValue;
 end;
 
+{**
+ * Note lanes of the sing screen. Without a [SingNoteArea] section the classic
+ * 800x600 layout is used, scaled to the theme's canvas.
+ *}
+procedure TTheme.ThemeLoadSingNoteArea;
+var
+  SectionList: TThemeSectionList;
+  SX, SY: real;
+begin
+  SectionList := GetSectionList('SingNoteArea');
+  SX := RenderW / 800;
+  SY := RenderH / 600;
+  with Sing.NoteArea do
+  begin
+    Left         := ReadInteger(SectionList, 'Left', Round(20 * SX));
+    Right        := ReadInteger(SectionList, 'Right', RenderW - Round(20 * SX));
+    LineSpacing  := ReadInteger(SectionList, 'LineSpacing', Round(15 * SY));
+    LineSpacing3 := ReadInteger(SectionList, 'LineSpacing3', Round(12 * SY));
+    Top1Row      := ReadInteger(SectionList, 'Top1Row', Round(430 * SY));
+    Top2Rows1    := ReadInteger(SectionList, 'Top2Rows1', Round(250 * SY));
+    Top2Rows2    := ReadInteger(SectionList, 'Top2Rows2', Round(430 * SY));
+    Top3Rows1    := ReadInteger(SectionList, 'Top3Rows1', Round(215 * SY));
+    Top3Rows2    := ReadInteger(SectionList, 'Top3Rows2', Round(340 * SY));
+    Top3Rows3    := ReadInteger(SectionList, 'Top3Rows3', Round(465 * SY));
+    NoteScale    := ReadFloat(SectionList, 'NoteScale', 1);
+    NoteCapScale := ReadFloat(SectionList, 'NoteCapScale', 1);
+    LineAlpha    := ReadFloat(SectionList, 'LineAlpha', 0.4);
+    LineColR     := 0.5;
+    LineColG     := 0.5;
+    LineColB     := 0.5;
+    LoadColor(LineColR, LineColG, LineColB, ReadString(SectionList, 'LineColor', ''));
+    Left3        := ReadInteger(SectionList, 'Left3', Round(20 * SX));
+    Right3       := ReadInteger(SectionList, 'Right3', RenderW - Round(20 * SX));
+    LaneTex      := ReadString(SectionList, 'LaneTex', '');
+    LaneLeft     := ReadInteger(SectionList, 'LaneLeft', Left);
+    LaneRight    := ReadInteger(SectionList, 'LaneRight', Right);
+    LanePadTop   := ReadInteger(SectionList, 'LanePadTop', 10);
+    LanePadBottom := ReadInteger(SectionList, 'LanePadBottom', 10);
+    LaneAlpha    := ReadFloat(SectionList, 'LaneAlpha', 0);
+    LaneColR     := 0;
+    LaneColG     := 0;
+    LaneColB     := 0;
+    LoadColor(LaneColR, LaneColG, LaneColB, ReadString(SectionList, 'LaneColor', ''));
+    HudTex       := ReadString(SectionList, 'HudTex', '');
+    HudW         := ReadInteger(SectionList, 'HudW', 0);
+    HudAlpha     := ReadFloat(SectionList, 'HudAlpha', 0);
+    LanePad3     := ReadInteger(SectionList, 'LanePad3', 16);
+  end;
+  SectionList := GetSectionList('SingLineBonus');
+  with Sing.LineBonus do
+  begin
+    W     := ReadInteger(SectionList, 'W', 0);
+    H     := ReadInteger(SectionList, 'H', 0);
+    Y     := ReadInteger(SectionList, 'Y', 0);
+    Size  := ReadInteger(SectionList, 'Size', 18);
+    Font  := ReadInteger(SectionList, 'Font', 0);
+    Style := ReadInteger(SectionList, 'Style', 2);
+  end;
+end;
+
 procedure TTheme.ThemeLoadBasic(Theme: TThemeBasic; const Name: string);
 begin
   ThemeLoadBackground(Theme.Background, Name);
@@ -2403,6 +2527,7 @@ begin
   ThemeText.Style := ReadInteger(SectionList, 'Style', ftRegular);
   ThemeText.Size  := ReadInteger(SectionList, 'Size', 0);
   ThemeText.Align := ReadInteger(SectionList, 'Align', 0);
+  ThemeText.MinSize := ReadInteger(SectionList, 'MinSize', 0);
 
   ThemeText.Text  := Language.Translate(ReadString(SectionList, 'Text', ''));
   ThemeText.Color := ReadString(SectionList, 'Color', '');
@@ -2770,6 +2895,9 @@ begin
   LoadColor(ThemeSelectS.STDColR, ThemeSelectS.STDColG,  ThemeSelectS.STDColB, ReadString(SectionList, 'STDColor', ''));
   ThemeSelectS.STDInt :=  ReadFloat(SectionList, 'STDInt', 1);
 
+  ThemeSelectS.UseSTUColor := ColorExists(ReadString(SectionList, 'STUColor', '')) >= 0;
+  LoadColor(ThemeSelectS.STUColR, ThemeSelectS.STUColG, ThemeSelectS.STUColB, ReadString(SectionList, 'STUColor', ''));
+
   ThemeSelectS.showArrows := ReadBool(SectionList, 'ShowArrows', false);
   ThemeSelectS.oneItemOnly := ReadBool(SectionList, 'OneItemOnly', false);
 end;
@@ -2865,13 +2993,24 @@ begin
   IniFile := ResolveThemeFile('Colors');
   IniFile.ReadSection('Colors', SL);
 
+  // colours only defined by the skin
+  if (Skin.SkinColors <> nil) then
+    for C := 0 to Skin.SkinColors.Count-1 do
+      if (SL.IndexOf(Skin.SkinColors.Names[C]) < 0) then
+        SL.Add(Skin.SkinColors.Names[C]);
+
   // normal colors
   SetLength(Color, SL.Count);
   for C := 0 to SL.Count-1 do
   begin
     Color[C].Name := SL.Strings[C];
 
-    S := IniFile.ReadString('Colors', SL.Strings[C], '');
+    S := '';
+    if (Skin.SkinColors <> nil) then
+      S := Trim(Skin.SkinColors.Values[SL.Strings[C]]);
+    if (S = '') then
+      S := IniFile.ReadString('Colors', SL.Strings[C], '');
+    S := Trim(S);
 
     Color[C].RGB.R := StrToInt(Copy(S, 1, Pos(' ' , S)-1))/255;
     Delete(S, 1, Pos(' ', S));
@@ -3873,6 +4012,20 @@ begin
   //Rap Icons
   ThemeLoadStatic(Song.RapIcon, 'Song' + prefix + 'RapIcon');
   ThemeLoadStatic(Song.RapToFreestyleIcon, 'Song' + prefix + 'RapToFreestyleIcon');
+
+  Song.HasDetail := SectionExists('Song' + prefix + 'DetailTitle', Song.HasDetail) and Song.HasDetail;
+  ThemeLoadText(Song.DetailTitle, 'Song' + prefix + 'DetailTitle');
+  ThemeLoadText(Song.TextInfo, 'Song' + prefix + 'TextInfo');
+  ThemeLoadText(Song.DetailArtist, 'Song' + prefix + 'DetailArtist');
+  ThemeLoadText(Song.DetailYear, 'Song' + prefix + 'DetailYear');
+  ThemeLoadStatic(Song.DetailVideoIcon, 'Song' + prefix + 'DetailVideoIcon');
+  ThemeLoadStatic(Song.DetailMedleyIcon, 'Song' + prefix + 'DetailMedleyIcon');
+  ThemeLoadStatic(Song.DetailCalculatedMedleyIcon, 'Song' + prefix + 'DetailCalculatedMedleyIcon');
+  ThemeLoadStatic(Song.DetailDuetIcon, 'Song' + prefix + 'DetailDuetIcon');
+  ThemeLoadStatic(Song.DetailRapIcon, 'Song' + prefix + 'DetailRapIcon');
+  ThemeLoadStatic(Song.DetailRapToFreestyleIcon, 'Song' + prefix + 'DetailRapToFreestyleIcon');
+  Song.IconFlow := ReadInteger(GetSectionList('Song' + prefix + 'Icons'), 'Flow', 0);
+  Song.IconGap := ReadInteger(GetSectionList('Song' + prefix + 'Icons'), 'Gap', 8);
 
   //Show Cat in TopLeft Mod
   ThemeLoadStatic(Song.StaticCat, 'Song' + prefix + 'StaticCat');

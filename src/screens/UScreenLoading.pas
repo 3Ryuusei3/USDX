@@ -74,8 +74,13 @@ implementation
 uses
   UGraphic,
   UDisplay,
+  ULanguage,
   URenderer,
   UTime;
+
+const
+  // the empty part of a progress bar, relative to the filled part
+  TrackAlpha = 0.25;
 
 function TScreenLoading.ParseInput(PressedKey: cardinal; CharCode: UCS4Char; PressedDown: boolean): boolean;
 begin
@@ -126,8 +131,8 @@ begin
   end;
 
   LastRedrawTicks := 0;
-  UpdateBar(DiscoveryBarBaseIndex, DiscoveryBarFillIndex, 0, DiscoveryBarAlpha * 0.5, DiscoveryBarAlpha);
-  UpdateBar(LoadingBarBaseIndex, LoadingBarFillIndex, 0, LoadingBarAlpha * 0.5, LoadingBarAlpha);
+  UpdateBar(DiscoveryBarBaseIndex, DiscoveryBarFillIndex, 0, DiscoveryBarAlpha * TrackAlpha, DiscoveryBarAlpha);
+  UpdateBar(LoadingBarBaseIndex, LoadingBarFillIndex, 0, LoadingBarAlpha * TrackAlpha, LoadingBarAlpha);
   UpdateStatus('');
   RefreshProgress(true);
   Fadeout := false;
@@ -194,30 +199,40 @@ begin
   end;
 end;
 
+// the status line says what is happening in words: "Looking for songs ·
+// 120 found", "Reading songs · 80 of 120"
 procedure TScreenLoading.SetDiscoveryProgress(Current, Total, SongsFound: integer);
 begin
-  UpdateBar(DiscoveryBarBaseIndex, DiscoveryBarFillIndex, ClampProgress(Current, Total), DiscoveryBarAlpha * 0.5, DiscoveryBarAlpha);
-  if SongsFound > 0 then
-    UpdateStatus(Format('0 / %5d', [SongsFound]))
-  else
-    UpdateStatus('');
+  UpdateBar(DiscoveryBarBaseIndex, DiscoveryBarFillIndex, ClampProgress(Current, Total), DiscoveryBarAlpha * TrackAlpha, DiscoveryBarAlpha);
+  if (StatusTextIndex >= 0) then
+  begin
+    if SongsFound > 0 then
+      Text[StatusTextIndex].Text := Format(Language.Translate('LOADING_FOUND'), [SongsFound])
+    else
+      Text[StatusTextIndex].Text := Language.Translate('LOADING_SEARCHING');
+  end;
   RefreshProgress;
 end;
 
 procedure TScreenLoading.SetSongLoadingProgress(Current, Total: integer);
 begin
-  UpdateBar(LoadingBarBaseIndex, LoadingBarFillIndex, ClampProgress(Current, Total), LoadingBarAlpha * 0.5, LoadingBarAlpha);
-  if Total > 0 then
-    UpdateStatus(Format('%5d / %5d', [Current, Total]))
-  else
-    UpdateStatus('');
+  UpdateBar(LoadingBarBaseIndex, LoadingBarFillIndex, ClampProgress(Current, Total), LoadingBarAlpha * TrackAlpha, LoadingBarAlpha);
+  if (StatusTextIndex >= 0) then
+  begin
+    if Total > 0 then
+      Text[StatusTextIndex].Text := Format(Language.Translate('LOADING_SONGS'), [Current, Total])
+    else
+      Text[StatusTextIndex].Text := StatusTextBase;
+  end;
   RefreshProgress;
 end;
 
+// steps of the start (e.g. "Loading ScreenSong") are not shown, they mean
+// nothing to the player
 procedure TScreenLoading.SetStatus(const Value: UTF8String);
 begin
   if (StatusTextIndex >= 0) and (StatusTextIndex < Length(Text)) then
-    Text[StatusTextIndex].Text := Value;
+    Text[StatusTextIndex].Text := StatusTextBase;
   RefreshProgress(true);
 end;
 

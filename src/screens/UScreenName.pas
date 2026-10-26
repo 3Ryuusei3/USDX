@@ -613,7 +613,7 @@ begin
   begin
     Statics[PlayerCurrent[I]].Visible := I < Count;
     Text[PlayerCurrentText[I]].Visible := I < Count;
-    Statics[PlayerCurrentAvatar[I]].Visible := I < Count;
+    Statics[PlayerCurrentAvatar[I]].Visible := (I < Count) and Theme.Name.PlayerScrollAvatar.Show;
   end;
 
   // list players
@@ -808,6 +808,12 @@ begin
 
   PlayerAvatar := AddButton(Theme.Name.PlayerButtonAvatar);
   PlayerAvatarIID := High(Interactions);
+  if not Theme.Name.PlayerScrollAvatar.Show then
+  begin
+    // theme without avatar pictures: the players only have their colour
+    Button[PlayerAvatar].Visible := false;
+    Button[PlayerAvatar].Selectable := false;
+  end;
 
   PlayerName := AddButton(Theme.Name.PlayerButtonName);
   Button[PlayerName].Text[0].Writable := true;
@@ -920,6 +926,14 @@ var
   X:        real;
   Factor:   real;
 begin
+  if not Theme.Name.PlayerScrollAvatar.Show then
+  begin
+    for B := 0 to High(PlayerAvatarButton) do
+      if (PlayerAvatarButton[B] > 0) then // 0: slot of an avatar that could not be loaded
+        Button[PlayerAvatarButton[B]].Visible := false;
+    Exit;
+  end;
+
 
   VS := Length(AvatarsList);
 
@@ -968,7 +982,8 @@ begin
         Button[B].Y := (Theme.Name.PlayerAvatar.Y  + (Theme.Name.PlayerAvatar.H - Abs(Theme.Name.PlayerAvatar.H * cos(Angle))) * 0.5);
         Button[B].Z := 0.95 - Abs(Pos) * 0.01;
 
-        Button[B].Reflection := true;
+        // flat themes can turn the mirror effect off
+        Button[B].Reflection := Theme.Name.PlayerScrollAvatar.Reflection;
         Button[B].Reflectionspacing := 2;
 
         if (B <> PlayerAvatarButton[PlayerAvatars[PlayerIndex]]) then

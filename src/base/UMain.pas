@@ -450,14 +450,17 @@ begin
             end;
           end;
 
+          // window points -> pixels of the drawn area (high DPI, bars)
+          WindowToView(Event.button.x, Event.button.y);
+
           if UpdateMouse then
           begin
             // used to update mouse coords and allow the relative mouse emulated by joystick axis motion
             if assigned(Joy) then Joy.OnMouseMove(EnsureRange(Event.button.X, 0, 799),
                                                   EnsureRange(Event.button.Y, 0,599));
 
-            Display.MoveCursor(Event.button.X * 800 * Screens / ScreenW,
-                               Event.button.Y * 600 / ScreenH);
+            Display.MoveCursor(Event.button.X * RenderW * Screens / ScreenW,
+                               Event.button.Y * RenderH / ScreenH);
           end;
 
           if not Assigned(Display.NextScreen) then

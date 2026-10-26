@@ -124,7 +124,16 @@ type
       STDColG:    single;
       STDColB:    single;
       STDInt:     single;
-      
+
+      // optional colour of the chosen option's text while the slide is not
+      // focused (e.g. when it is drawn on the accent colour only on focus)
+      UseSTUColor: boolean;
+      STUColR:    single;
+      STUColG:    single;
+      STUColB:    single;
+      CurSelText: integer;
+      procedure ColorSelText;
+
       // position and size
       procedure SetX(PosX: single); override;
       function GetX(): single; override;
@@ -194,6 +203,8 @@ constructor TSelectSlide.Create(PosX, PosY, W, H, SkipX, SBGW, ColR, ColG, ColB,
   const Caption: UTF8String; var Data: integer);
 begin
   inherited Create;
+  CurSelText := -1;
+  UseSTUColor := false;
   Text := TText.Create;
   SetLength(TextOpt, 1);
   TextOpt[0] := TText.Create;
@@ -405,6 +416,25 @@ begin
       TextureSBG.Int := SBGDInt;
     end;
   end;
+  ColorSelText;
+end;
+
+procedure TSelectSlide.ColorSelText;
+begin
+  if (CurSelText < 0) or (CurSelText > High(TextOpt)) then
+    Exit;
+  if UseSTUColor and not SelectBool then
+  begin
+    TextOpt[CurSelText].ColR := STUColR;
+    TextOpt[CurSelText].ColG := STUColG;
+    TextOpt[CurSelText].ColB := STUColB;
+  end
+  else
+  begin
+    TextOpt[CurSelText].ColR := STColR;
+    TextOpt[CurSelText].ColG := STColG;
+    TextOpt[CurSelText].ColB := STColB;
+  end;
 end;
 
 procedure TSelectSlide.SetSelectOpt(Value: integer);
@@ -431,6 +461,8 @@ var
       TextOpt[Sel].ColG := STColG;
       TextOpt[Sel].ColB := STColB;
       TextOpt[Sel].Int := STInt;
+      CurSelText := Sel;
+      ColorSelText;
       end;
     end;
 

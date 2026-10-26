@@ -1570,7 +1570,9 @@ end;
 
 procedure TRenderer_OpenGLBase.SetScissorRect(X, Y: integer; W, H: cardinal);
 begin
-  glScissor(X, Y, W, H);
+  // callers give coordinates within the drawn area; add its offset in the
+  // window (bars when the aspect ratio is kept)
+  glScissor(X + ViewOffX, Y + ViewOffY, W, H);
   {$IFDEF DEBUG_MODE}
   RaiseExceptionIfError;
   {$ENDIF};
@@ -1699,13 +1701,13 @@ begin
   begin
     ProjectionMatrix.data[0,0] := 2 / (RenderW - NewX);
     ProjectionMatrix.data[0,3] := -1 * ((RenderW + NewX) / (RenderW - NewX));
-    glViewport(WindowBoundary, ViewPortArray[1], (ScreenAct * ScreenWPerScreen) - WindowBoundary, ViewPortArray[3]);
+    glViewport(ViewOffX + WindowBoundary, ViewPortArray[1], (ScreenAct * ScreenWPerScreen) - WindowBoundary, ViewPortArray[3]);
   end
   else
   begin
     ProjectionMatrix.data[0,0] := 2 / NewX;
     ProjectionMatrix.data[0,3] := -1;
-    glViewPort((ScreenAct - 1) * ScreenWPerScreen, ViewPortArray[1], WindowBoundary - (ScreenAct - 1) * ScreenWPerScreen, ViewPortArray[3]);
+    glViewPort(ViewOffX + (ScreenAct - 1) * ScreenWPerScreen, ViewPortArray[1], WindowBoundary - (ScreenAct - 1) * ScreenWPerScreen, ViewPortArray[3]);
   end;
   UpdateTransformText := true;
   {$IFDEF DEBUG_MODE}
@@ -1751,7 +1753,7 @@ begin
   RowSize := ((ScreenW*3 + (Align-1)) div Align) * Align;
 
   GetMem(Result, RowSize * ScreenH);
-  glReadPixels(0, 0, ScreenW, ScreenH, GL_RGB, GL_UNSIGNED_BYTE, Result);
+  glReadPixels(ViewOffX, ViewOffY, ScreenW, ScreenH, GL_RGB, GL_UNSIGNED_BYTE, Result);
 end;
 
 {$IFDEF DEBUG_MODE}

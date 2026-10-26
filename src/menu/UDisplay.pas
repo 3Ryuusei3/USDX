@@ -305,10 +305,18 @@ var
 begin
   Result := true;
 
+  // bars around the drawn area (theme keeps its aspect ratio)
+  if (ViewOffX > 0) or (ViewOffY > 0) then
+  begin
+    Renderer.ScissorTest := false;
+    Renderer.SetClearColor(0, 0, 0, 1);
+    Renderer.ClearFrameBuffer(CLEAR_COLOR);
+  end;
+
   for S := 1 to Screens do
   begin
     ScreenAct := S;
-    Renderer.SetViewPort((S-1) * ScreenWPerScreen, 0, ScreenWPerScreen, ScreenH);
+    Renderer.SetViewPort(ViewOffX + (S-1) * ScreenWPerScreen, ViewOffY, ScreenWPerScreen, ScreenH);
 
     // popup check was successful... move on
     if CheckOK then
@@ -391,7 +399,7 @@ begin
           end;
 
           // copy screen to texture
-          FadeTex[S-1].CopyFrameBuffer((S-1) * ScreenWPerScreen, 0, FadeCopyW, FadeCopyH);
+          FadeTex[S-1].CopyFrameBuffer(ViewOffX + (S-1) * ScreenWPerScreen, ViewOffY, FadeCopyW, FadeCopyH);
 
           if (Renderer.Error) then
           begin

@@ -916,6 +916,9 @@ begin
     ScreenSing.fCurrentVideo.Draw;
   end;
 
+  // note lanes (theme backgrounds) go below the statics and texts
+  SingDrawLanes;
+
   // draw static menu (FG)
   ScreenSing.DrawFG;
 

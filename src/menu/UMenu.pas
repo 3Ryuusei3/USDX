@@ -922,6 +922,11 @@ function TMenu.AddText(ThemeText: TThemeText): integer;
 begin
   Result := AddText(ThemeText.X, ThemeText.Y, ThemeText.W, ThemeText.H, ThemeText.Font, ThemeText.Style, ThemeText.Size,
     ThemeText.ColR, ThemeText.ColG, ThemeText.ColB, ThemeText.Align, ThemeText.Text, ThemeText.Reflection, ThemeText.ReflectionSpacing, ThemeText.Z, ThemeText.Writable);
+  if (ThemeText.MinSize > 0) then
+  begin
+    Text[Result].MinSize := ThemeText.MinSize;
+    Text[Result].Text := Text[Result].Text; // re-split with the limit
+  end;
 end;
 
 function TMenu.AddText(X, Y: real; const Text_: UTF8String): integer;
@@ -1019,6 +1024,15 @@ begin
       ThemeButton.Text[BT].ColR, ThemeButton.Text[BT].ColG, ThemeButton.Text[BT].ColB,
       ThemeButton.Text[BT].Font, ThemeButton.Text[BT].Style, ThemeButton.Text[BT].Size,
       ThemeButton.Text[BT].Align, ThemeButton.Text[BT].Text);
+    // a button text may have its own colour while the button is not selected
+    if (ThemeButton.Text[BT].DColor <> '') then
+      with Button[Result].Text[High(Button[Result].Text)] do
+      begin
+        DColR := ThemeButton.Text[BT].DColR;
+        DColG := ThemeButton.Text[BT].DColG;
+        DColB := ThemeButton.Text[BT].DColB;
+        UseDColor := true;
+      end;
   end;
 
   // button collection mod
@@ -1626,6 +1640,11 @@ begin
   SelectsS[High(SelectsS)].Tex_SelectS_ArrowR.Z := ThemeSelectS.Z;
 
   SelectsS[High(SelectsS)].showArrows := ThemeSelectS.showArrows;
+  SelectsS[High(SelectsS)].UseSTUColor := ThemeSelectS.UseSTUColor;
+  SelectsS[High(SelectsS)].STUColR := ThemeSelectS.STUColR;
+  SelectsS[High(SelectsS)].STUColG := ThemeSelectS.STUColG;
+  SelectsS[High(SelectsS)].STUColB := ThemeSelectS.STUColB;
+  SelectsS[High(SelectsS)].ColorSelText;
   SelectsS[High(SelectsS)].oneItemOnly := ThemeSelectS.oneItemOnly;
 
   //Generate Lines
@@ -2148,8 +2167,19 @@ begin
 
   ThemeButtonBack := Theme.OptionsSub.ButtonBack;
   ThemeButtonBack.Y := Round(ScrollArea.Y + ScrollArea.H + Theme.OptionsSub.ButtonBackVSpacing);
-  AddButton(ThemeButtonBack);
-  AddButtonText(20, 3, Theme.Options.Description[OPTIONS_DESC_INDEX_BACK]);
+  // a theme can style the back button's text (Texts = 1); otherwise it is
+  // added in white as before
+  if (Length(ThemeButtonBack.Text) > 0) then
+  begin
+    SetLength(ThemeButtonBack.Text, 1);
+    ThemeButtonBack.Text[0].Text := Theme.Options.Description[OPTIONS_DESC_INDEX_BACK];
+    AddButton(ThemeButtonBack);
+  end
+  else
+  begin
+    AddButton(ThemeButtonBack);
+    AddButtonText(20, 3, Theme.Options.Description[OPTIONS_DESC_INDEX_BACK]);
+  end;
   Interaction := 0;
 
 end;

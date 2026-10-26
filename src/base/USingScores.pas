@@ -241,6 +241,29 @@ uses
   UNote,
   UGraphic;
 
+{ themes can give the line bonus popup its own size: a badge that appears on
+  the score background and fades there, instead of the classic popup that is
+  as big as the score background and slides into it }
+procedure ApplyThemeLineBonus(var P: TScorePosition);
+begin
+  if Theme.Sing.LineBonus.H > 0 then
+  begin
+    if Theme.Sing.LineBonus.W > 0 then
+      P.PUW := Theme.Sing.LineBonus.W
+    else
+      P.PUW := P.BGW;
+    P.PUH := Theme.Sing.LineBonus.H;
+    P.PUStartX := P.BGX + (P.BGW - P.PUW) / 2;
+    P.PUStartY := P.BGY + Theme.Sing.LineBonus.Y;
+    P.PUTargetX := P.PUStartX;
+    P.PUTargetY := P.PUStartY;
+    P.PUSize := Theme.Sing.LineBonus.Size;
+    P.PUFont := Theme.Sing.LineBonus.Font;
+    P.PUStyle := Theme.Sing.LineBonus.Style;
+  end;
+end;
+
+
 {**
  * sets some standard settings
  *}
@@ -391,6 +414,8 @@ var
 
     nPosition.PUTargetX := nPosition.BGX;
     nPosition.PUTargetY := nPosition.TextY;
+
+    ApplyThemeLineBonus(nPosition);
 
     AddPosition(@nPosition);
   end;
@@ -785,6 +810,7 @@ var
   var
     yOffset: integer;
     puSize: integer;
+    Tmp: TScorePosition;
   begin
     if (CurrentSong.isDuet) then begin
       yOffset := 40;
@@ -803,6 +829,23 @@ var
 
     aPositions[PIndex].PUTargetX := themeElements.ScoreBackground.X;
     aPositions[PIndex].PUTargetY := themeElements.Score.Y;
+
+    // themed badge: only the popup fields are taken over
+    Tmp := aPositions[PIndex];
+    Tmp.BGX := themeElements.ScoreBackground.X;
+    Tmp.BGY := themeElements.ScoreBackground.Y;
+    Tmp.BGW := themeElements.ScoreBackground.W;
+    Tmp.BGH := themeElements.ScoreBackground.H;
+    ApplyThemeLineBonus(Tmp);
+    aPositions[PIndex].PUW := Tmp.PUW;
+    aPositions[PIndex].PUH := Tmp.PUH;
+    aPositions[PIndex].PUStartX := Tmp.PUStartX;
+    aPositions[PIndex].PUStartY := Tmp.PUStartY;
+    aPositions[PIndex].PUTargetX := Tmp.PUTargetX;
+    aPositions[PIndex].PUTargetY := Tmp.PUTargetY;
+    aPositions[PIndex].PUSize := Tmp.PUSize;
+    aPositions[PIndex].PUFont := Tmp.PUFont;
+    aPositions[PIndex].PUStyle := Tmp.PUStyle;
 
   end;
 begin

@@ -61,6 +61,10 @@ type
       ColR:    single;
       ColG:    single;
       ColB:    single;
+      // colour while the text's button is not selected (themes: DColor of a
+      // button text); only used when UseDColor is set
+      DColR, DColG, DColB: single;
+      UseDColor: boolean;
 
       Alpha:   single;
       Int:     single;
@@ -74,6 +78,12 @@ type
       ReflectionSpacing: single;
 
       Writable: boolean;
+
+      // with W and H set, long texts get smaller down to MinSize; below
+      // that they are cut with "..." (0: no limit)
+      MinSize: single;
+
+      function LineCount: integer;
 
       procedure SetSelect(Value: boolean);
       property Selected: boolean read SelectBool write SetSelect;
@@ -260,18 +270,33 @@ begin
   // until the text fits within the given height
   if (H > 0) and (Len * Size > H) then
   begin
-    if (DecFontSize) then
+    if DecFontSize and not ((MinSize > 0) and (Size - 1 < MinSize)) then
     begin
       Size := Size - 1; // round(Size * 0.95 * 10) / 10;
       SetText(Value);
     end
     else
     begin
-      Len := trunc(H / Size);
+      Len := Max(1, trunc(H / Size));
       SetLength(TextTiles, Len);
+      // make room for the dots
+      if (W > 0) then
+      begin
+        SetFontFamily(Font);
+        SetFontStyle(Style);
+        SetFontSize(Size);
+        while (Length(TextTiles[Len-1]) > 1) and (TextWidth(TextTiles[Len-1] + '...') > W) do
+          TextTiles[Len-1] := UTF8Copy(TextTiles[Len-1], 1, LengthUTF8(TextTiles[Len-1]) - 1);
+        TextTiles[Len-1] := TrimRight(TextTiles[Len-1]);
+      end;
       TextTiles[Len-1] := TextTiles[Len-1] + '...';
     end;
   end;
+end;
+
+function TText.LineCount: integer;
+begin
+  Result := Length(TextTiles);
 end;
 
 procedure TText.DeleteLastLetter;
@@ -293,7 +318,10 @@ begin
     SetFontSize(Size);
     SetFontItalic(false);
 
-    SetFontColor(ColR*Int, ColG*Int, ColB*Int, Alpha);
+    if UseDColor and not SelectBool then
+      SetFontColor(DColR*Int, DColG*Int, DColB*Int, Alpha)
+    else
+      SetFontColor(ColR*Int, ColG*Int, ColB*Int, Alpha);
 
     // reflection
     if Reflection then
