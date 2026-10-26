@@ -49,6 +49,7 @@ type
 
       STicks:      cardinal;
       SelectBlink: boolean;
+      AnimStart:   cardinal;   // colour transition between Color and DColor
     public
       X:       single;
       Y:       single;
@@ -112,6 +113,12 @@ uses
 
 procedure TText.SetSelect(Value: boolean);
 begin
+  if UseDColor and (Value <> SelectBool) then
+  begin
+    AnimStart := SDL_GetTicks();
+    if (AnimStart = 0) then
+      AnimStart := 1;
+  end;
   SelectBool := Value;
 
   // set cursor visible
@@ -306,6 +313,7 @@ end;
 
 procedure TText.Draw;
 var
+  E:      single;
   X2, Y2: single;
   tmpText2, Text2:  UTF8String;
   I:      integer;
@@ -318,7 +326,23 @@ begin
     SetFontSize(Size);
     SetFontItalic(false);
 
-    if UseDColor and not SelectBool then
+    if UseDColor and (AnimStart <> 0) then
+    begin
+      // ease from the other colour to the current one
+      E := (SDL_GetTicks() - AnimStart) / 140;
+      if (E >= 1) then
+      begin
+        AnimStart := 0;
+        E := 1;
+      end
+      else
+        E := 1 - (1 - E) * (1 - E) * (1 - E);
+      if not SelectBool then
+        E := 1 - E; // E: share of the selected colour
+      SetFontColor((DColR + (ColR - DColR) * E) * Int, (DColG + (ColG - DColG) * E) * Int,
+                   (DColB + (ColB - DColB) * E) * Int, Alpha);
+    end
+    else if UseDColor and not SelectBool then
       SetFontColor(DColR*Int, DColG*Int, DColB*Int, Alpha)
     else
       SetFontColor(ColR*Int, ColG*Int, ColB*Int, Alpha);

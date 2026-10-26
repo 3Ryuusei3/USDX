@@ -39,6 +39,7 @@ uses
 
 var
   CheckMouseButton: boolean; // for checking mouse motion
+  KeyIsRepeat: boolean;      // the key being handled is held down (auto repeat)
   MAX_FPS: Byte; // 0 to 255 is enough
 
 
@@ -112,10 +113,12 @@ begin
   try
   {$ENDIF}
     SetMultiByteConversionCodePage(CP_UTF8);
-    WindowTitle := USDXVersionStr;
+    // name of this build of the game (window, menu bar); the log keeps the
+    // version of UltraStar Deluxe it is based on
+    WindowTitle := 'UltraStar Core';
 
     Platform.Init;
-    Log.Title := WindowTitle;
+    Log.Title := USDXVersionStr;
     Log.FileOutputEnabled := true;
     
     // Commandline Parameter Parser
@@ -397,6 +400,7 @@ begin
   SuppressKey := false;
   while (SDL_PollEvent(@Event) <> 0) do
   begin
+    KeyIsRepeat := (Event.type_ = SDL_KEYDOWN) and (Event.key._repeat <> 0);
     case Event.type_ of
       SDL_QUITEV:
       begin

@@ -743,7 +743,7 @@ begin
           end
           else
           begin
-            NotesH2 := int(NotesH[PlayerIndex] * 0.65);
+            NotesH2 := int(NotesH[PlayerIndex] * Theme.Sing.NoteArea.MissScale);
           end;
 
           Rec.Top    := Top - (Tone-CurrentSong.Tracks[Track].Lines[CurrentSong.Tracks[Track].CurrentLine].BaseNote)*LineSpacing/2 - NotesH2;
@@ -1227,25 +1227,28 @@ var
 begin
   with Theme.Sing.NoteArea do
   begin
-    if (LaneAlpha <= 0) or (LaneTex = '') then
-      Exit;
-    Tex := Renderer.GetTexture(Skin.GetTextureFileName(LaneTex), TEXTURE_TYPE_TRANSPARENT);
-    if (Tex = nil) then
-      Exit;
-    Tex.X := LaneX1;
-    Tex.W := LaneX2 - LaneX1;
-    Tex.Y := Baseline - 7 * LS - LanePadTop;
-    Tex.H := 9 * LS + LanePadTop + LanePadBottom;
-    Tex.Z := 0;
-    Tex.ColR := LaneColR;
-    Tex.ColG := LaneColG;
-    Tex.ColB := LaneColB;
-    Tex.Alpha := LaneAlpha;
-    Tex.TexX1 := 0;
-    Tex.TexY1 := 0;
-    Tex.TexX2 := 1;
-    Tex.TexY2 := 1;
-    Renderer.DrawTexture(Tex);
+    // veil behind the notes (optional)
+    if (LaneAlpha > 0) and (LaneTex <> '') then
+    begin
+      Tex := Renderer.GetTexture(Skin.GetTextureFileName(LaneTex), TEXTURE_TYPE_TRANSPARENT);
+      if (Tex <> nil) then
+      begin
+        Tex.X := LaneX1;
+        Tex.W := LaneX2 - LaneX1;
+        Tex.Y := Baseline - 7 * LS - LanePadTop;
+        Tex.H := 9 * LS + LanePadTop + LanePadBottom;
+        Tex.Z := 0;
+        Tex.ColR := LaneColR;
+        Tex.ColG := LaneColG;
+        Tex.ColB := LaneColB;
+        Tex.Alpha := LaneAlpha;
+        Tex.TexX1 := 0;
+        Tex.TexY1 := 0;
+        Tex.TexX2 := 1;
+        Tex.TexY2 := 1;
+        Renderer.DrawTexture(Tex);
+      end;
+    end;
 
     // the players' score card at the left end of the lane
     if Hud and (HudW > 0) and (HudAlpha > 0) and (HudTex <> '') then
@@ -1253,10 +1256,13 @@ begin
       Tex := Renderer.GetTexture(Skin.GetTextureFileName(HudTex), TEXTURE_TYPE_TRANSPARENT);
       if (Tex = nil) then
         Exit;
-      Tex.X := LaneX1;
+      Tex.X := LaneX1 + HudX;
       Tex.W := HudW;
-      Tex.Y := Baseline - 7 * LS - LanePadTop;
-      Tex.H := 9 * LS + LanePadTop + LanePadBottom;
+      Tex.Y := Baseline - 7 * LS - LanePadTop + HudY;
+      if (HudH > 0) then
+        Tex.H := HudH
+      else
+        Tex.H := 9 * LS + LanePadTop + LanePadBottom;
       Tex.Z := 0;
       Tex.ColR := LaneColR;
       Tex.ColG := LaneColG;

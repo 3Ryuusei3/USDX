@@ -729,6 +729,8 @@ var
   Bytes: GLuint;
   ColorR, ColorG, ColorB: single;
   X2, Y2: single;
+  RotCX, RotCY, RotS, RotC, RotDX, RotDY: single;
+  V: integer;
 begin
   Tex := TTexture_OpenGL(Texture);
   if (Tex.TexID = 0) then
@@ -835,6 +837,22 @@ begin
     begin
       Buffer[VERTEX_BOTTOMRIGHT_OFFSET + X_OFFSET] := Buffer[VERTEX_BOTTOMRIGHT_OFFSET + X_OFFSET] + Shear;
       Buffer[VERTEX_BOTTOMLEFT_OFFSET + X_OFFSET] := Buffer[VERTEX_BOTTOMLEFT_OFFSET + X_OFFSET] + Shear;
+    end;
+
+    // rotation around the centre
+    if (Rot <> 0) then
+    begin
+      RotCX := X + W / 2;
+      RotCY := Y + H / 2;
+      RotS := Sin(Rot);
+      RotC := Cos(Rot);
+      for V := 0 to 3 do
+      begin
+        RotDX := Buffer[V * VERTEX_STRIDE + X_OFFSET] - RotCX;
+        RotDY := Buffer[V * VERTEX_STRIDE + Y_OFFSET] - RotCY;
+        Buffer[V * VERTEX_STRIDE + X_OFFSET] := RotCX + RotDX * RotC - RotDY * RotS;
+        Buffer[V * VERTEX_STRIDE + Y_OFFSET] := RotCY + RotDX * RotS + RotDY * RotC;
+      end;
     end;
 
     // Now do the reflection

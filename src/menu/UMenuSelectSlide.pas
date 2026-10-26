@@ -128,10 +128,16 @@ type
       // optional colour of the chosen option's text while the slide is not
       // focused (e.g. when it is drawn on the accent colour only on focus)
       UseSTUColor: boolean;
+      DAlpha: single;     // label box opacity while not selected
       STUColR:    single;
       STUColG:    single;
       STUColB:    single;
       CurSelText: integer;
+
+      // animations: focus (colours) and a new value (the text slides in)
+      FocusTicks, ValueTicks: cardinal;
+      ValueDir: integer;
+      FromTexCol, FromSBGCol, ToTexCol, ToSBGCol: array[0..2] of single;
       procedure ColorSelText;
 
       // position and size
@@ -190,6 +196,7 @@ implementation
 uses
   math,
   SysUtils,
+  sdl2,
   UGraphic,
   ULog,
   UMenu;
@@ -205,6 +212,7 @@ begin
   inherited Create;
   CurSelText := -1;
   UseSTUColor := false;
+  DAlpha := 1;
   Text := TText.Create;
   SetLength(TextOpt, 1);
   TextOpt[0] := TText.Create;
@@ -365,6 +373,14 @@ procedure TSelectSlide.SetSelect(Value: boolean);
   SO: integer;
   I:  integer;}
 begin
+  if (Value <> SelectBool) then
+  begin
+    FromTexCol[0] := Texture.ColR; FromTexCol[1] := Texture.ColG; FromTexCol[2] := Texture.ColB;
+    FromSBGCol[0] := TextureSBG.ColR; FromSBGCol[1] := TextureSBG.ColG; FromSBGCol[2] := TextureSBG.ColB;
+    FocusTicks := SDL_GetTicks();
+    if (FocusTicks = 0) then
+      FocusTicks := 1;
+  end;
   SelectBool := Value;
   if Value then
   begin
@@ -467,6 +483,13 @@ var
     end;
 
 begin
+  if (Value <> SelectOptInt) and (Length(TextOpt) = 1) then
+  begin
+    if (Value > SelectOptInt) then ValueDir := 1 else ValueDir := -1;
+    ValueTicks := SDL_GetTicks();
+    if (ValueTicks = 0) then
+      ValueTicks := 1;
+  end;
   SelectOptInt := Value;
   PData^ := Value;
 
@@ -557,7 +580,12 @@ begin
 end;
 
 procedure TSelectSlide.SetX(PosX: single);
+var
+  I: integer;
 begin
+  // the option texts move along
+  for I := Low(TextOpt) to High(TextOpt) do
+    TextOpt[I].X := TextOpt[I].X + (PosX - self.PosX);
   Texture.X := PosX;
   self.Tex_SelectS_ArrowL.X := PosX + Texture.W + SkipX;
   self.Tex_SelectS_ArrowR.X := PosX + Texture.W + SkipX + SBGW - self.Tex_SelectS_ArrowR.W;
@@ -653,9 +681,55 @@ end;
 procedure TSelectSlide.Draw;
 var
   SO: integer;
+  T, E, DX, A: single;
 begin
   if Visible then
   begin
+    // focus: colours ease over (not for colorized textures)
+    if (FocusTicks <> 0) then
+    begin
+      begin
+        ToTexCol[0] := ColR * Ord(SelectBool) + DColR * Ord(not SelectBool);
+        ToTexCol[1] := ColG * Ord(SelectBool) + DColG * Ord(not SelectBool);
+        ToTexCol[2] := ColB * Ord(SelectBool) + DColB * Ord(not SelectBool);
+        ToSBGCol[0] := SBGColR * Ord(SelectBool) + SBGDColR * Ord(not SelectBool);
+        ToSBGCol[1] := SBGColG * Ord(SelectBool) + SBGDColG * Ord(not SelectBool);
+        ToSBGCol[2] := SBGColB * Ord(SelectBool) + SBGDColB * Ord(not SelectBool);
+      end;
+      T := (SDL_GetTicks() - FocusTicks) / 150;
+      if (T >= 1) then
+      begin
+        T := 1;
+        FocusTicks := 0;
+      end;
+      E := 1 - (1 - T) * (1 - T) * (1 - T);
+      if not Colorized then
+      begin
+        Texture.ColR := FromTexCol[0] + (ToTexCol[0] - FromTexCol[0]) * E;
+        Texture.ColG := FromTexCol[1] + (ToTexCol[1] - FromTexCol[1]) * E;
+        Texture.ColB := FromTexCol[2] + (ToTexCol[2] - FromTexCol[2]) * E;
+      end;
+      if not ColorizedSBG then
+      begin
+        TextureSBG.ColR := FromSBGCol[0] + (ToSBGCol[0] - FromSBGCol[0]) * E;
+        TextureSBG.ColG := FromSBGCol[1] + (ToSBGCol[1] - FromSBGCol[1]) * E;
+        TextureSBG.ColB := FromSBGCol[2] + (ToSBGCol[2] - FromSBGCol[2]) * E;
+      end;
+    end;
+    // label box: fades with the focus when DAlpha < 1
+    if (DAlpha < 0.999) then
+    begin
+      if (FocusTicks <> 0) then
+        T := Min(1, (SDL_GetTicks() - FocusTicks) / 150)
+      else
+        T := 1;
+      E := 1 - (1 - T) * (1 - T) * (1 - T);
+      if SelectBool then
+        Texture.Alpha := DAlpha + (1 - DAlpha) * E
+      else
+        Texture.Alpha := 1 - (1 - DAlpha) * E;
+    end;
+
     if SelectBool or not Colorized then
     begin
       Renderer.DrawTexture(Texture);
@@ -690,8 +764,30 @@ begin
 
     Text.Draw;
 
+    // a new value slides in from the side of the arrow that was pressed
+    DX := 0;
+    A := 1;
+    if (ValueTicks <> 0) then
+    begin
+      T := (SDL_GetTicks() - ValueTicks) / 180;
+      if (T >= 1) then
+      begin
+        T := 1;
+        ValueTicks := 0;
+      end;
+      E := 1 - (1 - T) * (1 - T) * (1 - T);
+      DX := (1 - E) * 16 * ValueDir;
+      A := 0.25 + 0.75 * E;
+    end;
     for SO := Low(TextOpt) to High(TextOpt) do
+    begin
+      TextOpt[SO].X := TextOpt[SO].X + DX;
+      TextOpt[SO].Alpha := TextOpt[SO].Alpha * A;
       TextOpt[SO].Draw;
+      TextOpt[SO].X := TextOpt[SO].X - DX;
+      if (A > 0) then
+        TextOpt[SO].Alpha := TextOpt[SO].Alpha / A;
+    end;
   end;
 end;
 

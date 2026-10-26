@@ -73,7 +73,10 @@ type
     fClock: cardinal;
     fMaxSize: integer;
     fMaxCount: integer;
+    fSquare: boolean;        // crop to a centred square
+    fRadius: real;           // rounded corners, fraction of the side (0 = none)
     procedure Evict;
+    procedure Shape(var Surface: PSDL_Surface);
   public
     OnEvict: TCoverEvictEvent;
     InUse: TCoverInUseFunc;
@@ -83,6 +86,8 @@ type
     function Get(const Name: IPath): TTexture;
     function IsCached(const Name: IPath): boolean;
     procedure Request(const Name: IPath);
+    { how covers are cut (from the theme); a change empties the cache }
+    procedure SetShape(Square: boolean; Radius: real);
     { main thread: upload what the loader finished; true if anything new }
     function Poll: boolean;
     { worker }
@@ -104,6 +109,8 @@ const
 type
   // gives access to TRenderer's protected LoadTexture(Data, ...)
   TRendererAccess = class(TRenderer);
+
+procedure RoundCorners(Surface: PSDL_Surface; Radius: real); forward;
 
 function CoverThreadMain(Data: Pointer): integer; cdecl;
 begin
@@ -176,12 +183,20 @@ begin
     Surface := LoadImage(Path(Name));
     if (Surface <> nil) then
     begin
+      if fSquare and (Surface.W <> Surface.H) then
+        Shape(Surface);
       if (Max(Surface.W, Surface.H) > fMaxSize) then
       begin
         Scale := Max(Surface.W, Surface.H) / fMaxSize;
         ScaleImage(Surface, Max(1, Floor(Surface.W / Scale)), Max(1, Floor(Surface.H / Scale)));
       end;
-      AdjustPixelFormat(Surface, TEXTURE_TYPE_PLAIN);
+      if (fRadius > 0) then
+      begin
+        AdjustPixelFormat(Surface, TEXTURE_TYPE_TRANSPARENT);
+        RoundCorners(Surface, fRadius);
+      end
+      else
+        AdjustPixelFormat(Surface, TEXTURE_TYPE_PLAIN);
     end;
 
     SDL_LockMutex(fLock);
@@ -190,6 +205,89 @@ begin
     fDone.AddObject(Name, TObject(Surface));
     SDL_UnlockMutex(fLock);
   end;
+end;
+
+{ cuts the middle square out of the image }
+procedure TCoverLoader.Shape(var Surface: PSDL_Surface);
+var
+  Side: integer;
+  Src: TSDL_Rect;
+  Square: PSDL_Surface;
+begin
+  Side := Min(Surface.W, Surface.H);
+  Src.x := (Surface.W - Side) div 2;
+  Src.y := (Surface.H - Side) div 2;
+  Src.w := Side;
+  Src.h := Side;
+  Square := SDL_CreateRGBSurfaceWithFormat(0, Side, Side, 32, SDL_PIXELFORMAT_RGBA32);
+  if (Square = nil) then
+    Exit;
+  SDL_SetSurfaceBlendMode(Surface, SDL_BLENDMODE_NONE);
+  if (SDL_BlitSurface(Surface, @Src, Square, nil) <> 0) then
+  begin
+    SDL_FreeSurface(Square);
+    Exit;
+  end;
+  SDL_FreeSurface(Surface);
+  Surface := Square;
+end;
+
+{ transparent, antialiased corners (RGBA32 surface) }
+procedure RoundCorners(Surface: PSDL_Surface; Radius: real);
+var
+  R, D, Cov: real;
+  X, Y, CX, CY, N: integer;
+  Row: PByte;
+begin
+  R := Radius * Min(Surface.W, Surface.H);
+  N := Ceil(R);
+  if (N <= 0) then
+    Exit;
+  SDL_LockSurface(Surface);
+  for Y := 0 to Surface.H - 1 do
+  begin
+    if (Y >= N) and (Y < Surface.H - N) then
+      Continue;
+    Row := PByte(Surface.pixels) + Y * Surface.pitch;
+    for X := 0 to Surface.W - 1 do
+    begin
+      if (X >= N) and (X < Surface.W - N) then
+        Continue;
+      // the centre of the corner's circle
+      if (X < N) then CX := N else CX := Surface.W - N;
+      if (Y < N) then CY := N else CY := Surface.H - N;
+      D := Sqrt(Sqr(X + 0.5 - CX) + Sqr(Y + 0.5 - CY));
+      Cov := R - D + 0.5;
+      if (Cov >= 1) then
+        Continue;
+      if (Cov < 0) then
+        Cov := 0;
+      (Row + X * 4 + 3)^ := Round((Row + X * 4 + 3)^ * Cov);
+    end;
+  end;
+  SDL_UnlockSurface(Surface);
+end;
+
+procedure TCoverLoader.SetShape(Square: boolean; Radius: real);
+var
+  I: integer;
+begin
+  if (Square = fSquare) and (Abs(Radius - fRadius) < 0.0001) then
+    Exit;
+  SDL_LockMutex(fLock);
+  fSquare := Square;
+  fRadius := Radius;
+  fQueue.Clear;
+  for I := 0 to fDone.Count - 1 do
+    SDL_FreeSurface(PSDL_Surface(fDone.Objects[I]));
+  fDone.Clear;
+  SDL_UnlockMutex(fLock);
+  for I := 0 to fCache.Count - 1 do
+  begin
+    TCoverEntry(fCache.Objects[I]).Tex.Free;
+    fCache.Objects[I].Free;
+  end;
+  fCache.Clear;
 end;
 
 function TCoverLoader.IsCached(const Name: IPath): boolean;
@@ -280,6 +378,7 @@ var
   I: integer;
   Surface: PSDL_Surface;
   E: TCoverEntry;
+  Typ: TTextureType;
 begin
   Result := false;
   if (fDone.Count = 0) then // a racy peek is fine here
@@ -298,8 +397,12 @@ begin
     if (Surface <> nil) then
     begin
       SDL_LockSurface(Surface);
+      if (Surface^.format^.BytesPerPixel = 4) then
+        Typ := TEXTURE_TYPE_TRANSPARENT
+      else
+        Typ := TEXTURE_TYPE_PLAIN;
       E.Tex := TRendererAccess(Renderer).LoadTexture(PByte(Surface^.pixels), Surface^.w, Surface^.h, Path(Done[I]),
-                                    TEXTURE_TYPE_PLAIN, true);
+                                    Typ, true);
       SDL_FreeSurface(Surface);
     end;
     Inc(fClock);

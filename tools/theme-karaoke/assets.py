@@ -360,47 +360,41 @@ class Assets:
     # -- note pieces -------------------------------------------------------
     def notes(self, prefix, body, rap=False):
         """Left cap, tiling middle and right cap of a note. body is the RGB of
-        the note body; the game replaces only its hue. Every note has a dark
-        ring and a light ring outside it, so it stays visible over any video.
+        the note body; the game replaces only its hue. A soft dark shadow
+        around the body keeps it visible over any video (no outline).
         Returns the three texture names."""
+        from PIL import ImageFilter
         H = 64                      # texture height = note height
-        ring_light, ring_dark = 6, 6  # out of 64 (= 2px each on a ~22px note)
-        light = (242, 242, 239, 204)
-        dark = (14, 15, 18, 255)
+        inset = 9                   # room for the shadow (out of 64)
+        cap, mid = 32, 64
+        total = cap + 3 * mid + cap
+        s = SS
 
-        def draw(w, kind):
-            im = self._canvas(w, H)
-            d = ImageDraw.Draw(im)
-            s = SS
-            R = H * s / 2
+        def pill(img, ins, fill):
+            d = ImageDraw.Draw(img)
+            r = H * s / 2 - ins * s
+            d.rounded_rectangle((ins * s, ins * s, total * s - ins * s, H * s - ins * s), r, fill=fill)
 
-            def shape(inset, fill):
-                if kind == "mid":
-                    d.rectangle((0, inset * s, w * s, H * s - inset * s), fill=fill)
-                else:
-                    # half of a circle of diameter H (left or right cap)
-                    cx = (w * s) if kind == "left" else 0
-                    r = R - inset * s
-                    d.ellipse((cx - r, R - r, cx + r, R + r), fill=fill)
-                    if kind == "left":
-                        d.rectangle((cx, inset * s, w * s, H * s - inset * s), fill=fill)
-                    else:
-                        d.rectangle((0, inset * s, cx, H * s - inset * s), fill=fill)
-
-            shape(0, light)
-            shape(ring_light, dark)
-            shape(ring_light + ring_dark, body + (255,))
-            if rap:
-                # rap notes: a row of dark dots inside the body
-                if kind == "mid":
-                    for x in range(4, w, 16):
-                        d.ellipse((x * s, (H / 2 - 4) * s, (x + 8) * s, (H / 2 + 4) * s), fill=dark)
-            return self._down(im, w, H)
+        # shadow: the pill, blurred and a little lower
+        sh = Image.new("RGBA", (total * s, H * s), (0, 0, 0, 0))
+        pill(sh, inset - 1, (8, 8, 10, 175))
+        sh = sh.transform(sh.size, Image.AFFINE, (1, 0, 0, 0, 1, -2 * s))
+        sh = sh.filter(ImageFilter.GaussianBlur(5 * s))
+        im = Image.new("RGBA", (total * s, H * s), (255, 255, 255, 0))
+        im.alpha_composite(sh)
+        body_l = Image.new("RGBA", im.size, (0, 0, 0, 0))
+        pill(body_l, inset, body + (255,))
+        if rap:
+            d = ImageDraw.Draw(body_l)
+            for x in range(cap + 4, total - cap, 16):
+                d.ellipse((x * s, (H / 2 - 4) * s, (x + 8) * s, (H / 2 + 4) * s), fill=(14, 15, 18, 255))
+        im.alpha_composite(body_l)
+        full = self._down(im, total, H)
 
         names = []
-        for kind, w in (("left", 32), ("mid", 64), ("right", 32)):
+        for kind, x0, w in (("left", 0, cap), ("mid", cap + mid, mid), ("right", total - cap, cap)):
             n = "%s%s" % (prefix, kind.capitalize())
-            self._save(n, n + ".png", draw(w, kind))
+            self._save(n, n + ".png", full.crop((x0, 0, x0 + w, H)))
             names.append(n)
         return names
 

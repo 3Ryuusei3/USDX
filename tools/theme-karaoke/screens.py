@@ -2,7 +2,7 @@
 following the design mock-ups.
 
 Conventions (see build_theme.py for the fonts and palette.py for colours):
-* header: 76 px, accent square + "Karaoke" + breadcrumb, 48 px side margin
+* header: 76 px, microphone + "UltraStar Core" + breadcrumb, 48 px side margin
 * footer: divider at y 656, legend key caps + labels
 * surfaces: Surface (cards), Surface2 (selected rows), Surface3 (chips)
 """
@@ -36,7 +36,7 @@ class Screen:
             self._drop(prefix + "Static", numbered=True)
         if not keep_texts:
             self._drop(prefix + "Text", numbered=True)
-        self.ini.set(prefix + "Background", od(Type="Texture", Tex="K_bg"))
+        self.ini.set(prefix + "Background", od(Type="Texture", Tex="K_bg", Motion=1))
 
     def _drop(self, base, numbered):
         for name in list(self.ini.sections):
@@ -86,10 +86,10 @@ class Screen:
 
     # -- common chrome --------------------------------------------------------
     def header(self, crumbs=()):
-        """Accent square, wordmark and an optional breadcrumb."""
-        self.panel(M, 32, 12, 12, r=3, color="Accent")
-        self.text(M + 22, 25, "Karaoke", size=20, font=FONT_DISPLAY, style=REGULAR)
-        x = M + 120
+        """Microphone mark, name and an optional breadcrumb."""
+        self.icon(M - 2, 26, 24, "mic", color="Accent")
+        self.text(M + 28, 26, "UltraStar Core", size=20, font=FONT_DISPLAY, style=BOLD)
+        x = M + 172
         for i, c in enumerate(crumbs):
             last = i == len(crumbs) - 1
             self.text(x, 26, "/", size=18, color="Muted")
@@ -141,7 +141,7 @@ def main_menu(b):
     tex = a.panel(row_w, row_h, 14)
     for name, label, numtxt in items:
         ini.set(name, od(X=M, Y=y, W=row_w, H=row_h, Tex=tex, Type="Transparent",
-                         Color="Surface2", DColor="Bg", Texts=2, Reflection=0))
+                         Color="Surface2", DColor="Bg", Texts=2, Reflection=0, SelectScale=1.02))
         ini.set(name + "Text1", text_section(label, 62, 12, 28, "Text", "Text2", FONT_DISPLAY, REGULAR))
         ini.set(name + "Text2", text_section(numtxt, 20, 20, 15, "AccentText", "Text3", FONT_MONO))
         y += row_h + 4
@@ -159,78 +159,179 @@ def main_menu(b):
     s.panel(px, py, pw, ph, r=24, color="Surface")
     ini.set("MainTextDescription", text_section("", px + 44, py + 64, 72, "Text", font=FONT_DISPLAY, style=BOLD))
     ini.set("MainTextDescriptionLong", text_section("", px + 44, py + 160, 20, "Text2", w=440))
-    # detail: a stave with note bars and the pitch marker
-    sx, sy = px + 44, py + 300
-    for i in range(4):
-        s.panel(sx, sy + 30 + i * 40, pw - 88, 1, r=0, color="Divider")
-    bars = [(0, 103, 84, "NoteBlue"), (96, 83, 52, "NoteBlue"), (160, 63, 112, "NoteBlue"),
-            (284, 43, 66, "Gold"), (362, 63, 44, None), (418, 103, 100, None), (530, 123, 56, None)]
-    for x, y_, w, col in bars:
-        if col:
-            s.panel(sx + x, sy + y_, w, 14, r=7, color=col)
-        else:
-            s.static(sx + x, sy + y_, w, 14, a.panel(w, 14, 7, outline=2), color="Line2")
-    s.panel(sx + 356, sy + 36, 2, 120, r=0, color="Accent")
-    s.panel(sx + 351, sy + 58, 12, 12, r=6, color="Accent")
+    # picture of the selected entry (the game shows one group at a time and
+    # lets its pieces slide in)
+    main_previews(b, px + 44, py + 290, pw - 88, 200)
 
     s.footer([("ButtonNavi", "Navegar"), ("ButtonEnter", "Seleccionar"), ("ButtonC", "Créditos")])
+
+
+def main_previews(b, sx, sy, sw, sh):
+    """One small flat illustration per main menu entry: MainPreviewNStaticM."""
+    ini, a = b.ini, b.assets
+    ini.remove_prefix("MainPreview")
+    groups = []
+
+    def g():
+        groups.append([])
+        return groups[-1]
+
+    def panel(grp, x, y, w, h, r, color, outline=0, alpha=1):
+        tex = a.panel(w, h, r, outline=outline) if outline else a.panel(w, h, r)
+        sec = od(X=sx + x, Y=sy + y, W=w, H=h, Tex=tex, Color=color, Type="Transparent")
+        if alpha != 1:
+            sec["Alpha"] = alpha
+        grp.append(sec)
+
+    def icon(grp, x, y, size, key, color):
+        grp.append(od(X=sx + x, Y=sy + y, W=size, H=size, Tex=a.icon(key, size=size), Color=color,
+                      Type="Transparent"))
+
+    # 1 sing: stave, sung notes, the pitch marker
+    st = g()
+    for i in range(4):
+        panel(st, 0, 30 + i * 40, sw, 1, 0, "Divider")
+    for x, y_, w, col in [(0, 103, 84, "NoteBlue"), (96, 83, 52, "NoteBlue"), (160, 63, 112, "NoteBlue"),
+                          (284, 43, 66, "Gold"), (362, 63, 44, None), (418, 103, 100, None), (530, 123, 56, None)]:
+        if col:
+            panel(st, x, y_, w, 14, 7, col)
+        else:
+            panel(st, x, y_, w, 14, 7, "Line2", outline=2)
+    panel(st, 356, 36, 2, 120, 0, "Accent")
+    panel(st, 351, 58, 12, 12, 6, "Accent")
+
+    # 2 party: three teams on a podium
+    pt = g()
+    base = 176
+    for i, (x, hgt, col) in enumerate(((150, 96, "NoteBlue"), (250, 140, "Accent"), (350, 70, "NoteMint"))):
+        panel(pt, x, base - hgt, 84, hgt, 14, col, alpha=0.9)
+        panel(pt, x + 22, base - hgt - 52, 40, 40, 20, col)
+    icon(pt, 272, base - 140 + 18, 40, "star", "OnAccent")
+    panel(pt, 110, base, 364, 2, 1, "Line2")
+
+    # 3 jukebox: a playlist with the song that plays
+    jb = g()
+    for i in range(3):
+        y_ = 20 + i * 52
+        cur = i == 1
+        panel(jb, 0, y_, sw, 44, 12, "Surface3" if cur else "Surface2")
+        icon(jb, 14, y_ + 10, 24, "play" if cur else "note", "Accent" if cur else "Text3")
+        panel(jb, 52, y_ + 14, 180 - i * 30, 8, 4, "Text2" if cur else "Line2")
+        panel(jb, 52, y_ + 26, 110, 6, 3, "Line2")
+    panel(jb, 0, 186, sw, 4, 2, "Line")
+    panel(jb, 0, 186, int(sw * 0.42), 4, 2, "Accent")
+
+    # 4 statistics: a bar chart
+    sg = g()
+    hs = [60, 96, 72, 130, 110, 150, 88, 120]
+    bw = 44
+    gap = (sw - len(hs) * bw) // (len(hs) - 1)
+    for i, hh in enumerate(hs):
+        panel(sg, i * (bw + gap), 176 - hh, bw, hh, 10, "Accent" if i == 5 else "Line2")
+    panel(sg, 0, 178, sw, 2, 1, "Line")
+
+    # 5 editor: piano roll with notes and the cursor
+    ed = g()
+    for i in range(6):
+        panel(ed, 0, 10 + i * 32, sw, 1, 0, "Divider")
+    for i in range(9):
+        panel(ed, i * (sw // 8), 10, 1, 160, 0, "Divider")
+    for x, y_, w, col in [(20, 116, 90, "NoteViolet"), (130, 84, 60, "NoteViolet"), (200, 52, 130, "Gold"),
+                          (350, 84, 80, "NoteViolet"), (450, 116, 110, "NoteViolet")]:
+        panel(ed, x, y_, w, 22, 8, col)
+    panel(ed, 340, 0, 2, 182, 0, "Accent")
+    panel(ed, 332, 0, 18, 10, 3, "Accent")
+
+    # 6 options: sliders and a switch
+    op = g()
+    for i, v in enumerate((0.7, 0.35, 0.55)):
+        y_ = 30 + i * 52
+        panel(op, 0, y_ - 4, 120, 10, 5, "Line2")
+        panel(op, 160, y_, sw - 260, 4, 2, "Line")
+        panel(op, 160, y_, int((sw - 260) * v), 4, 2, "Accent")
+        panel(op, 160 + int((sw - 260) * v) - 9, y_ - 7, 18, 18, 9, "Text")
+    panel(op, sw - 64, 21, 64, 32, 16, "Accent")
+    panel(op, sw - 34, 25, 24, 24, 12, "OnAccent")
+
+    # 7 about: three voices that meet
+    ab = g()
+    for x, col in ((200, "NoteBlue"), (262, "Gold"), (324, "NoteMint")):
+        panel(ab, x, 30, 120, 120, 60, col, alpha=0.75)
+    icon(ab, 296, 66, 48, "note", "OnAccent")
+
+    # 8 exit: goodbye
+    ex = g()
+    panel(ex, sw // 2 - 70, 20, 140, 140, 70, "Surface3")
+    icon(ex, sw // 2 - 32, 58, 64, "back", "Text2")
+
+    for i, grp in enumerate(groups):
+        for j, sec in enumerate(grp):
+            ini.set("MainPreview%dStatic%d" % (i + 1, j + 1), sec)
 
 
 # ---------------------------------------------------------------------------
 # Players
 # ---------------------------------------------------------------------------
 def players(b):
+    """One card per player (drawn by the game, see [NameCards]): colour with
+    the initial, name, microphone, colour and difficulty."""
     ini, a = b.ini, b.assets
     s = Screen(b, "Name")
     s.header(["¡Canta!", "Jugadores"])
-    s.text(M, 100, "¿Quién canta?", size=52, font=FONT_DISPLAY, style=BOLD)
-    s.text(M, 164, "Pon nombre a cada micrófono y elige la dificultad.", size=18, color="Text2")
+    s.text(M, 96, "¿Quién canta?", size=48, font=FONT_DISPLAY, style=BOLD)
+    s.text(M, 154, "Elige a cada jugador con ← →, escribe su nombre y su dificultad.", size=17, color="Text2")
 
-    # number of players (top right)
+    # number of players (top right, in the header)
     ini.set("NameSelectPlayerCount", od(
-        X=820, Y=112, W=190, H=44, SkipX=8, SBGW=214, Text="NAME_PLAYERS_COUNT", TextSize=18,
-        Tex=a.panel(190, 44, 12), Type="Transparent", TexSBG=a.panel(214, 44, 12), TypeSBG="Transparent",
-        Color="Surface2", DColor="Surface", TColor="Text", TDColor="Text2",
+        X=W - M - 248, Y=96, W=120, H=44, SkipX=8, SBGW=120, Text="NAME_PLAYERS_COUNT", TextSize=16,
+        Tex=a.panel(120, 44, 12), Type="Transparent", TexSBG=a.panel(120, 44, 12), TypeSBG="Transparent",
+        Color="Surface2", DColor="Bg", TColor="Text", TDColor="Text2",
         SBGColor="Accent", SBGDColor="Surface2", STColor="OnAccent", STUColor="Text", STDColor="Text",
         ArrowW=24, ArrowH=24))
 
-    # row of players: avatar in the player's colour + name
-    chip = 76
+    # the cards
+    cx, cy, cw_all, ch_all, cols, gap = M, 206, W - 2 * M, 384, 3, 20
+    cw = (cw_all - gap * (cols - 1)) // cols
+    chh = 270
+    ini.set("NameCards", od(Enabled=1, X=cx, Y=cy, W=cw_all, H=ch_all, Cols=cols, Gap=gap, MaxH=chh,
+                            CardTex=a.panel(cw, chh, 22), RingTex=a.panel(cw + 6, chh + 6, 25, outline=2),
+                            CircleTex=a.circle(56), SegTex=a.panel(108, 36, 10), TrackTex=a.panel(cw - 40, 44, 12),
+                            Font=FONT_INTER, TitleFont=FONT_DISPLAY))
+    # old row of players: not shown
     for i in range(6):
-        x = M + 24 + i * 196
-        ini.set("NamePlayerSelectStatic%d" % (i + 1), od(
-            X=x, Y=222, W=chip, H=chip, Tex=a.circle(chip), Color="P%dDark" % (i + 1), Type="Transparent", Z=1))
-        ini.set("NamePlayerSelectStatic%dText" % (i + 1), od(
-            X=x + chip // 2, Y=306, Font=FONT_INTER, Style=BOLD, Size=17, Align=1, Color="Text", Z=1))
-        # no avatar pictures: each player is its colour
-        ini.set("NamePlayerSelectStatic%dAvatar" % (i + 1), od(X=x, Y=222, W=0, H=0, Z=1))
-    # ring around the player being edited (X is relative to the player)
-    ini.set("NamePlayerSelectCurrent", od(X=-8, Y=214, W=chip + 16, H=chip + 16, Z=0.95,
-                                          Tex=a.panel(chip + 16, chip + 16, (chip + 16) // 2, outline=3),
-                                          Color="Accent", DColor="Accent", Type="Transparent"))
-
-    # editor of the current player
-    py = 352
-    s.panel(M, py, W - 2 * M, 280, r=24, color="Surface")
+        ini.set("NamePlayerSelectStatic%d" % (i + 1), od(X=-200, Y=-200, W=0, H=0, Tex=a.transparent(),
+                                                          Type="Transparent"))
+        ini.set("NamePlayerSelectStatic%dText" % (i + 1), od(X=-400, Y=-400, Size=1, Color="Text"))
+        ini.set("NamePlayerSelectStatic%dAvatar" % (i + 1), od(X=-200, Y=-200, W=0, H=0))
+    ini.set("NamePlayerSelectCurrent", od(X=-4000, Y=0, W=10, H=10, Tex=a.transparent(), DTex=a.transparent(),
+                                          Type="Transparent", Color="Accent", DColor="Accent"))
     ini.set("NamePlayerButtonAvatar", od(X=0, Y=0, W=0, H=0, Tex=a.transparent(), Type="Transparent"))
     ini.set("NamePlayerAvatar", od(X=0, Y=0, W=0, H=0, Reflection=0))
     ini.set("NamePlayerScrollAvatar", od(Count=3, Distance=24, Reflection=0, Show=0))
 
-    fx = M + 32
-    fw = W - 2 * M - 64
-    s.text(fx, py + 26, "NOMBRE", size=13, color="Text3", style=BOLD)
-    ini.set("NamePlayerButtonName", od(X=fx, Y=py + 52, W=fw, H=60, Z=1,
-                                       Tex=a.panel(fw, 60, 14), Color="P1Dark", DColor="P1Light",
+    # name field of the edited card (the game places it): a line under the name
+    nw = cw - 112
+    from PIL import Image, ImageDraw
+    line = Image.new("RGBA", (nw * 2, 44 * 2), (255, 255, 255, 0))
+    ImageDraw.Draw(line).rectangle((0, 44 * 2 - 4, nw * 2, 44 * 2), fill=(255, 255, 255, 255))
+    lname = a.save_custom("K_nameline_%d" % nw, line)
+    ini.set("NamePlayerButtonName", od(X=0, Y=0, W=nw, H=44, Z=1, Tex=lname, Color="P1Dark", DColor="P1Light",
                                        Type="Transparent", Texts=1))
-    ini.set("NamePlayerButtonNameText1", text_section("", 24, 14, 28, "OnAccent", font=FONT_DISPLAY))
-    lw_ = 220
-    slide = od(TexSBG=a.panel(fw - lw_ - 8, 48, 12), TypeSBG="Transparent",
-               Tex=a.panel(lw_, 48, 12), Type="Transparent",
-               X=fx, W=lw_, H=48, SkipX=8, SBGW=fw - lw_ - 8, TextSize=20, ArrowW=24, ArrowH=24,
-               Color="Surface2", DColor="Surface", TColor="Text", TDColor="Text2",
-               SBGDColor="PlayerDark", SBGColor="PlayerLight", STColor="OnAccent", STDColor="Text", Z=1)
-    ini.set("NameSelectPlayerColor", OrderedDict(slide, Y=str(py + 136), Text="Color"))
-    ini.set("NameSelectPlayerLevel", OrderedDict(slide, Y=str(py + 196), Text="PARTY_DIFFICULTY"))
+    ini.set("NamePlayerButtonNameText1", text_section("", 8, 10, 24, "Text", font=FONT_DISPLAY))
+    lw_ = 92
+    slide = od(TexSBG=a.panel(cw - 40 - lw_ - 8, 40, 12), TypeSBG="Transparent",
+               Tex=a.panel(lw_, 40, 12), Type="Transparent",
+               X=0, W=lw_, H=40, SkipX=8, SBGW=cw - 40 - lw_ - 8, TextSize=15, ArrowW=24, ArrowH=24,
+               Color="Surface3", DColor="Surface2", TColor="Text", TDColor="Text3",
+               SBGDColor="PlayerDark", SBGColor="PlayerLight", STColor="OnAccent", STDColor="OnAccent", Z=1)
+    ini.set("NameSelectPlayerColor", OrderedDict(slide, Y="0", Text="Color"))
+    ini.set("NameSelectPlayerLevel", OrderedDict(slide, X="-4000", Y="0", Text="PARTY_DIFFICULTY"))
+
+    # where Enter goes
+    bw = 236
+    s.panel(W - M - bw, 604, bw, 44, r=22, color="Accent")
+    s.text(W - M - bw + 26, 615, "Elegir canción", size=18, color="OnAccent", style=BOLD)
+    s.icon(W - M - 46, 614, 24, "arrow_right", color="OnAccent")
 
     s.footer([("ButtonNavi", "Navegar"), ("ButtonAZ", "Escribir nombre"), ("ButtonEnter", "Elegir canción"),
               ("ButtonEsc", "Atrás")])
@@ -288,6 +389,8 @@ def song_common(b, mode, score_x, score_y):
     P = "Song" + mode
     s = Screen(b, P)
     s.header(["Elige la canción"])
+    # covers cut to a square with rounded corners (radius in 1/1000 of the side)
+    ini.set(P + "CoverShape", od(Square=1, Radius=57))
     # search hint (the search opens with J)
     sx = W - M - 300
     s.panel(sx, 18, 300, 40, r=20, color="Surface")
@@ -339,7 +442,8 @@ def song_roulette(b):
     cx, cy = W // 2 - cw // 2, 104
     ini.set("SongRouletteCover", od(X=cx, Y=cy, W=cw, H=cw, Reflections=0))
     # ring around the cover in front
-    s.static(cx - 9, cy - 9, cw + 18, cw + 18, a.panel(cw + 18, cw + 18, 26, outline=3), color="Accent", z=0.96)
+    # concentric with the cover's rounded corners (CoverShape: 17 px of 300)
+    s.static(cx - 8, cy - 8, cw + 16, cw + 16, a.panel(cw + 16, cw + 16, 25, outline=3), color="Accent", z=0.96)
     song_details(b, "SongRoulette", W // 2 - 340, 424, 680, align=1, title=34)
     ini.set("SongRouletteTextNumber", od(X=M, Y=620, Z=0.95, Color="Text3", Font=FONT_MONO, Size=14, Align=0))
 
@@ -409,10 +513,11 @@ def song_list(b):
 # ---------------------------------------------------------------------------
 # Singing
 # ---------------------------------------------------------------------------
-LANE_X, LANE_W, LANE_H = 32, W - 64, 136
-LANES = (70, 404)          # top of the lane of player 1 and player 2
-LS = 13                    # line spacing (pitch step = LS / 2)
-HUD_W = 200
+LS = 18                    # line spacing (pitch step = LS / 2): tall rows
+LANE_X, LANE_W, LANE_H = 32, W - 64, 9 * LS + 20
+PILL_W, PILL_H = 440, 32   # each player's score pill, just above its staff
+LANES = (92, 408)          # top of the lane of player 1 and player 2
+LYRICS_Y, LYRICS_H = 596, 104
 
 
 def sing(b):
@@ -425,37 +530,37 @@ def sing(b):
     lines_top = [t + 10 for t in LANES]
     base = [lt + 7 * LS for lt in lines_top]
     ini.set("SingNoteArea", od(
-        Left=LANE_X + HUD_W + 24, Right=LANE_X + LANE_W - 24, LineSpacing=LS, LineSpacing3=12,
+        Left=LANE_X + 24, Right=LANE_X + LANE_W - 24, LineSpacing=LS, LineSpacing3=12,
         Top3Rows1=236, Top3Rows2=376, Top3Rows3=516, LanePad3=20,
         Top1Row=base[1], Top2Rows1=base[0], Top2Rows2=base[1],
-        Left3=184, Right3=W - 184, NoteScale=1.1, NoteCapScale=2,
+        Left3=184, Right3=W - 184, NoteScale=1.4, NoteCapScale=2, MissScale=0.8,
         LineColor="ScrimText", LineAlpha=0.18,
         LaneTex=a.panel(LANE_W, LANE_H, 20), LaneLeft=LANE_X, LaneRight=LANE_X + LANE_W,
-        LanePadTop=10, LanePadBottom=LANE_H - 9 * LS - 10, LaneColor="Scrim", LaneAlpha=0.3,
-        HudTex=a.panel(HUD_W, LANE_H, 20), HudW=HUD_W, HudAlpha=0.35))
+        LanePadTop=10, LanePadBottom=LANE_H - 9 * LS - 10, LaneColor="Scrim", LaneAlpha=0,
+        HudTex=a.pill(PILL_W, PILL_H), HudW=PILL_W, HudH=PILL_H, HudX=0, HudY=-PILL_H - 2, HudAlpha=0.72))
 
-    # score card of each player, at the left end of its lane: drawn with the
-    # lane (SingNoteArea Hud*), below the name and avatar; ScoreBG itself is
-    # empty, since the game draws it over them. The texts have a dark outline,
-    # so they read over any video.
-    ini.set("SingDefaultScoreBG", od(Tex="ScoreBG", W=HUD_W, H=LANE_H, Type="Colorized"))
-    # line bonus: a badge hanging on the bottom edge of the score card
-    ini.set("SingLineBonus", od(W=150, H=30, Y=LANE_H - 15, Size=16, Font=FONT_INTER, Style=1))
+    # score of each player: a pill just above its staff (drawn with the lane,
+    # SingNoteArea Hud*), so the notes get the whole width. ScoreBG itself is
+    # empty, since the game draws it over the texts. The texts have a dark
+    # outline, so they read over any video.
+    ini.set("SingDefaultScoreBG", od(Tex="ScoreBG", W=PILL_W, H=PILL_H, Type="Colorized"))
+    # line bonus: a badge that pops up to the right of the pill
+    ini.set("SingLineBonus", od(W=150, H=PILL_H - 2, Y=1, Size=16, Font=FONT_INTER, Style=1))
 
-    def player(prefix, top, color):
-        x = LANE_X
-        ini.set("Sing%sStatic" % prefix, od(X=x + 18, Y=top + 18, W=26, H=26, Tex=a.circle(26),
+    def player(prefix, lane_top, color):
+        x, top = LANE_X, lane_top - PILL_H - 2
+        ini.set("Sing%sStatic" % prefix, od(X=x + 8, Y=top + 6, W=20, H=20, Tex=a.circle(20),
                                             Color=color, Type="Transparent", Alpha=1))
-        ini.set("Sing%sAvatar" % prefix, od(X=x + 22, Y=top + 22, W=0, H=0, Z=1, Alpha=0))
-        ini.set("Sing%sText" % prefix, od(X=x + 54, Y=top + 17, Text="PLAYERNAME", Font=FONT_INTER, Style=OUTLINE,
-                                          Size=20, Color="ScrimText", Align=0))
-        # no ScoreBG here (W = 0): the card comes with the lane. X/Y still
-        # place the line bonus badge (centred on X, see SingLineBonus)
-        ini.set("Sing%sStatic2" % prefix, od(X=x + HUD_W // 2, Y=top, W=0, H=LANE_H))
-        ini.set("Sing%sTextScore" % prefix, od(Text="00000", X=x + 18, Y=top + 52, Font=FONT_MONO, Style=OUTLINE,
-                                               Size=34, Color="ScrimText", Align=0))
-        ini.set("Sing%sSingBar" % prefix, od(X=x + 18, Y=top + 104, W=HUD_W - 36, H=8))
-        ini.set("Sing%sOscilloscope" % prefix, od(X=x + 18, Y=top + 116, W=HUD_W - 36, H=12))
+        ini.set("Sing%sAvatar" % prefix, od(X=x + 8, Y=top + 6, W=0, H=0, Z=1, Alpha=0))
+        ini.set("Sing%sText" % prefix, od(X=x + 38, Y=top + 5, W=170, H=22, MinSize=13, Text="PLAYERNAME",
+                                          Font=FONT_INTER, Style=OUTLINE, Size=18, Color="ScrimText", Align=0))
+        # no ScoreBG here (W = 0): the pill comes with the lane. X/Y place
+        # the line bonus badge (centred on X, see SingLineBonus)
+        ini.set("Sing%sStatic2" % prefix, od(X=x + PILL_W + 12 + 75, Y=top, W=0, H=PILL_H))
+        ini.set("Sing%sTextScore" % prefix, od(Text="00000", X=x + 226, Y=top + 2, Font=FONT_MONO, Style=OUTLINE,
+                                               Size=24, Color="ScrimText", Align=0))
+        ini.set("Sing%sSingBar" % prefix, od(X=x + 316, Y=top + 12, W=PILL_W - 316 - 14, H=8))
+        ini.set("Sing%sOscilloscope" % prefix, od(X=x + PILL_W + 12, Y=top + 4, W=150, H=24))
 
     player("P1", LANES[1], "P1Dark")          # one player: lower lane, next to the lyrics
     player("P1TwoP", LANES[0], "P1Dark")
@@ -491,18 +596,19 @@ def sing(b):
             ini.set("Sing%sText" % pre, nm)
 
     # lyrics: a solid panel at the bottom; duets get a second one in the middle
-    ly = H - 24 - 140
-    ini.set("SingLyricsBar", od(Tex=a.panel(LANE_W, 140, 22), X=LANE_X, Y=ly, W=LANE_W, H=140,
+    ly = LYRICS_Y
+    ini.set("SingLyricsBar", od(Tex=a.panel(LANE_W, LYRICS_H, 22), X=LANE_X, Y=ly, W=LANE_W, H=LYRICS_H,
                                 Color="Scrim", Type="Transparent"))
-    ini.set("SingLyricsUpperBar", od(X=96, W=W - 192, Y=ly + 18, H=56, IndicatorYOffset=4))
-    ini.set("SingLyricsLowerBar", od(X=96, W=W - 192, Y=ly + 82, H=40))
+    ini.set("SingLyricsUpperBar", od(X=96, W=W - 192, Y=ly + 10, H=48, IndicatorYOffset=4))
+    ini.set("SingLyricsLowerBar", od(X=96, W=W - 192, Y=ly + 62, H=34))
     for p_ in ("SingLyricsDuetP2UpperBar", "SingLyricsDuetP2LowerBar"):
         ini.set(p_, OrderedDict(ini.get(p_.replace("DuetP2", ""))))
-    dy = 220
-    ini.set("SingLyricsBarDuet", od(Tex=a.panel(LANE_W, 120, 22), X=LANE_X, Y=dy, W=LANE_W, H=120,
+    dy = LANES[0] + LANE_H + 4     # between the first lane and the second pill
+    dh = LANES[1] - PILL_H - 2 - 4 - dy
+    ini.set("SingLyricsBarDuet", od(Tex=a.panel(LANE_W, dh, 22), X=LANE_X, Y=dy, W=LANE_W, H=dh,
                                     Color="Scrim", Type="Transparent"))
-    ini.set("SingLyricsDuetP1UpperBar", od(X=96, W=W - 192, Y=dy + 14, H=50, IndicatorYOffset=4))
-    ini.set("SingLyricsDuetP1LowerBar", od(X=96, W=W - 192, Y=dy + 70, H=36))
+    ini.set("SingLyricsDuetP1UpperBar", od(X=96, W=W - 192, Y=dy + 8, H=44, IndicatorYOffset=4))
+    ini.set("SingLyricsDuetP1LowerBar", od(X=96, W=W - 192, Y=dy + 56, H=30))
 
     # progress of the song: thin line at the very top + time chip
     ini.set("SingTimeBar", od(Tex=a.rect(), X=0, Y=0, W=W, H=4, Color="Scrim", Type="Transparent", Alpha=0.7))
@@ -631,10 +737,14 @@ def options(b):
         y = y0 + (i // cols) * (th + 12)
         # the tile itself is a static; the button only adds the focus ring
         s.panel(x, y, tw, th, r=18, color="Surface")
-        s.icon(x + 22, y + 22, 24, icon, color="Text2")
         name = "OptionsButton" + key
+        # the icon belongs to the button: on selection it grows, takes the
+        # accent colour and swings (the gear turns)
+        motion = od(IconSpin=180) if icon == "gear" else od(IconWobble=16)
         ini.set(name, od(X=x, Y=y, W=tw, H=th, Tex=ring, DTex=a.transparent(), Type="Transparent",
-                         Color="Accent", DColor="Surface", Texts=2, Reflection=0))
+                         Color="Accent", DColor="Surface", Texts=2, Reflection=0, SelectScale=1.04,
+                         IconTex=a.icon(icon, size=40), IconX=22, IconY=22, IconW=26, IconH=26,
+                         IconColor="Accent", IconDColor="Text2", IconScale=1.3, **motion))
         ini.set(name + "Text1", text_section(label, 22, th - 46, 22, "Text", "Text2", FONT_DISPLAY, REGULAR))
         ini.set(name + "Text2", text_section("%02d" % (i + 1), tw - 22, 24, 14, "AccentText", "Text3",
                                              FONT_MONO, align=2))
@@ -924,7 +1034,7 @@ def loading(b):
         s.panel(mx + x, my + y_, w_, 10, r=5, color=col)
     s.panel(mx + 100, my, 2, 64, r=1, color="Accent")
     s.panel(mx + 96, my + 10, 10, 10, r=5, color="Accent")
-    s.text(W // 2, 316, "Karaoke", size=48, font=FONT_DISPLAY, style=BOLD, align=1)
+    s.text(W // 2, 316, "UltraStar Core", size=48, font=FONT_DISPLAY, style=BOLD, align=1)
     s.text(W - M, H - 44, "US_VERSION", size=13, color="Text3", align=2)
 
 
@@ -979,9 +1089,14 @@ def build(b):
             x = int(r["X"]) + int(r["W"]) // 2 - 12
             b.ini.set(n, od(X=x, Y=int(r["Y"]) - 3, W=24, H=24, Tex=b.assets.icon(icon), Type="Transparent",
                             Color="Text", DColor="Text3"))
+    # boxes that blended into a flat background (DColor Bg) are transparent
+    # now that the background has a gradient: they fade in when selected
+    for name, sec in b.ini.sections.items():
+        if sec.get("DColor") == "Bg" and ("Tex" in sec or "SkipX" in sec or name.endswith("SelectSlide")):
+            sec["DAlpha"] = "0"
     # select slides of the other screens: same colours as the options rows
     b.ini.set("DefaultSelectSlide", od(
-        Color="Surface2", DColor="Bg", TColor="Text", TDColor="Text2",
+        Color="Surface2", DColor="Bg", DAlpha=0, TColor="Text", TDColor="Text2",
         SBGColor="Accent", SBGDColor="Surface", STColor="OnAccent", STUColor="Text", STDColor="Text3",
         TextSize=18), replace=False)
     # select slide arrows: drawn at the size of the icons

@@ -55,13 +55,31 @@ type
       FadeProgress: single;
       FadeLastTick: cardinal;
 
+      // short colour transition when the selection changes
+      AnimStart:    cardinal;
+      AnimFromR, AnimFromG, AnimFromB, AnimFromInt: single;
+      SelProg:      single;     // 0 = deselected .. 1 = selected (eased)
+      SelLastTick:  cardinal;
+
       DeSelectW,
       DeSelectH,
       PosX,
       PosY:         single;
 
 
+      // icon that comes alive when the button gets selected
+      Icon:         TTexture;
+      IconX, IconY, IconW, IconH: single;
+      IconSel, IconDesel: array[0..2] of single;
+      IconScale, IconSpin, IconWobble: single;
+      IconStart:    cardinal;
+
+      procedure UpdateColorAnim;
+      procedure DrawIcon;
+
     public
+      SelectScale:               single;   // > 1: grows around its centre when selected
+      DeselectAlpha:             single;   // < 1: fades out while not selected (0 = only the selected one shows)
       Text:                      array of TText;
       TextOffset:                array of TTextOffset;
       Texture:                   TTexture; // Button Screen position and size
@@ -102,6 +120,9 @@ type
       DeselectInt,
       DeselectTInt: single;
 
+      procedure SetIcon(Tex: TTexture; X, Y, W, H: single; R, G, B, DR, DG, DB: single;
+                        Scale, Spin, Wobble: single);
+
       function GetX(): single; override;
       procedure SetX(Value: single) override;
       function GetY(): single; override;
@@ -132,6 +153,7 @@ type
 implementation
 
 uses
+  Math,
   SysUtils,
   UDisplay;
 
@@ -230,6 +252,22 @@ procedure TButton.SetSelect(Value : boolean);
 var
   T: integer;
 begin
+  if (Value <> SelectBool) and not Colorized then
+  begin
+    AnimFromR := Texture.ColR;
+    AnimFromG := Texture.ColG;
+    AnimFromB := Texture.ColB;
+    AnimFromInt := Texture.Int;
+    AnimStart := SDL_GetTicks();
+    if (AnimStart = 0) then
+      AnimStart := 1;
+  end;
+  if Value and not SelectBool then
+  begin
+    IconStart := SDL_GetTicks();
+    if (IconStart = 0) then
+      IconStart := 1;
+  end;
   SelectBool := Value;
 
   if (Value) then
@@ -284,16 +322,156 @@ begin
   end;
 end;
 
+const
+  BUTTON_ANIM_MS = 140;
+
+procedure TButton.UpdateColorAnim;
+var
+  T, E: single;
+  R, G, B, I: single;
+  Now: cardinal;
+begin
+  // selection progress (for the size)
+  Now := SDL_GetTicks();
+  if (SelLastTick = 0) then
+    SelLastTick := Now;
+  if SelectBool then
+    SelProg := Min(1, SelProg + (Now - SelLastTick) / 160)
+  else
+    SelProg := Max(0, SelProg - (Now - SelLastTick) / 160);
+  SelLastTick := Now;
+
+  if (AnimStart = 0) then
+    Exit;
+  if SelectBool then
+  begin
+    R := SelectColR; G := SelectColG; B := SelectColB; I := SelectInt;
+  end
+  else
+  begin
+    R := DeselectColR; G := DeselectColG; B := DeselectColB; I := DeselectInt;
+  end;
+  T := (SDL_GetTicks() - AnimStart) / BUTTON_ANIM_MS;
+  if (T >= 1) then
+  begin
+    AnimStart := 0;
+    E := 1;
+  end
+  else
+    E := 1 - (1 - T) * (1 - T) * (1 - T); // ease out
+  Texture.ColR := AnimFromR + (R - AnimFromR) * E;
+  Texture.ColG := AnimFromG + (G - AnimFromG) * E;
+  Texture.ColB := AnimFromB + (B - AnimFromB) * E;
+  Texture.Int  := AnimFromInt + (I - AnimFromInt) * E;
+end;
+
+procedure TButton.SetIcon(Tex: TTexture; X, Y, W, H: single; R, G, B, DR, DG, DB: single;
+                          Scale, Spin, Wobble: single);
+begin
+  Icon := Tex;
+  IconX := X;
+  IconY := Y;
+  IconW := W;
+  IconH := H;
+  IconSel[0] := R;  IconSel[1] := G;  IconSel[2] := B;
+  IconDesel[0] := DR; IconDesel[1] := DG; IconDesel[2] := DB;
+  IconScale := Scale;
+  IconSpin := Spin;
+  IconWobble := Wobble;
+  IconStart := 0;
+end;
+
+const
+  ICON_SPIN_MS = 520;
+  ICON_WOBBLE_MS = 620;
+
+procedure TButton.DrawIcon;
+var
+  E, S, T, Angle, CX, CY: single;
+  Now: cardinal;
+begin
+  if (Icon = nil) then
+    Exit;
+  // grows (with a little overshoot) and takes the selected colour
+  E := SelProg;
+  if SelectBool then
+    S := 1 + (IconScale - 1) * (1 + 0.6 * Sin(Pi * E)) * E
+  else
+    S := 1 + (IconScale - 1) * E;
+  E := 1 - (1 - SelProg) * (1 - SelProg);
+  Icon.ColR := IconDesel[0] + (IconSel[0] - IconDesel[0]) * E;
+  Icon.ColG := IconDesel[1] + (IconSel[1] - IconDesel[1]) * E;
+  Icon.ColB := IconDesel[2] + (IconSel[2] - IconDesel[2]) * E;
+  Icon.Alpha := Texture.Alpha;
+
+  // turns once and/or swings when it gets selected
+  Angle := 0;
+  if (IconStart <> 0) then
+  begin
+    Now := SDL_GetTicks();
+    if (IconSpin <> 0) then
+    begin
+      T := Min(1, (Now - IconStart) / ICON_SPIN_MS);
+      E := 1 - (1 - T) * (1 - T) * (1 - T);
+      Angle := Angle - IconSpin * (1 - E);
+    end;
+    if (IconWobble <> 0) then
+    begin
+      T := Min(1, (Now - IconStart) / ICON_WOBBLE_MS);
+      Angle := Angle + IconWobble * Sin(T * 3 * Pi) * (1 - T) * (1 - T);
+    end;
+    if (Now - IconStart > Max(ICON_SPIN_MS, ICON_WOBBLE_MS)) then
+      IconStart := 0;
+  end;
+  Icon.Rot := Angle * Pi / 180;
+
+  // follows the button (also while it grows)
+  CX := Texture.X + IconX + IconW / 2;
+  CY := Texture.Y + IconY + IconH / 2;
+  if (DeSelectW > 0) and (DeSelectH > 0) then
+  begin
+    CX := Texture.X + (IconX + IconW / 2) * Texture.W / DeSelectW;
+    CY := Texture.Y + (IconY + IconH / 2) * Texture.H / DeSelectH;
+  end;
+  Icon.W := IconW * S;
+  Icon.H := IconH * S;
+  Icon.X := CX - Icon.W / 2;
+  Icon.Y := CY - Icon.H / 2;
+  Icon.Z := Texture.Z;
+  Renderer.DrawTexture(Icon);
+end;
+
 // ***** Public methods ****** //
 
 procedure TButton.Draw;
 var
+  E, Grow: single;
   T:       integer;
   Tick:    cardinal;
   Spacing: single;
 begin
   if Visible then
   begin
+    UpdateColorAnim;
+
+    // fade in when selected
+    if (DeselectAlpha < 0.999) then
+    begin
+      E := 1 - (1 - SelProg) * (1 - SelProg) * (1 - SelProg);
+      Texture.Alpha := DeselectAlpha + (1 - DeselectAlpha) * E;
+    end;
+
+    // grow when selected
+    if (SelectScale > 1.001) and not Fade then
+    begin
+      E := 1 - (1 - SelProg) * (1 - SelProg) * (1 - SelProg);
+      Grow := 1 + (SelectScale - 1) * E;
+      Texture.W := DeSelectW * Grow;
+      Texture.H := DeSelectH * Grow;
+      Texture.X := PosX - (Texture.W - DeSelectW) / 2;
+      Texture.Y := PosY - (Texture.H - DeSelectH) / 2;
+    end;
+
     //Fade Mod
     T:=0;
     if Fade then
@@ -450,6 +628,8 @@ begin
     if (FadeTex <> nil) then
       Renderer.DrawTexture(FadeTex);
 
+    DrawIcon;
+
     for T := 0 to High(Text) do
     begin
       Text[T].Draw;
@@ -509,6 +689,7 @@ begin
   Texture.Free;
   DeSelectTexture.Free;
   FadeTex.Free;
+  Icon.Free;
   inherited;
 end;
 
@@ -534,6 +715,9 @@ begin
   DeselectColB   := 1;
   DeselectInt    := 0.5;
   DeselectTInt   := 1;
+
+  SelectScale    := 1;
+  DeselectAlpha  := 1;
 
   Fade           := false;
   FadeTex        := nil;

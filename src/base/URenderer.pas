@@ -149,6 +149,7 @@ type
       W: single;
       H: single;
       Shear: single;
+      Rot: single;   // rotation around the centre, radians (not for reflections)
       Int: single; // intensity
       ColR, ColG, ColB: single;
       TexX1: single;
@@ -360,6 +361,7 @@ begin
   T.W := W;
   T.H := H;
   T.Int := Int;
+  T.Rot := Rot;
   T.ColR := ColR;
   T.ColG := ColG;
   T.ColB := ColB;

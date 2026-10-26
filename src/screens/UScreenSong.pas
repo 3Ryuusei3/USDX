@@ -305,6 +305,7 @@ type
       procedure UnloadCover(NumberOfButtonInArray: integer);
       procedure LoadCover(NumberOfButtonInArray: integer);
       procedure SetActualCover;
+      procedure PlayChangeSound;
       procedure ScrollListsTo(First: boolean);
       procedure LayoutSongInfo;
       procedure ApplyLoadedCovers;
@@ -501,7 +502,7 @@ begin
     begin
       if (TSongMenuMode(Ini.SongMenu) <> smList) then
       begin
-        AudioPlayback.PlaySound(SoundLib.Change);
+        PlayChangeSound;
         SelectNext(false);
         SetScrollRefresh;
       end
@@ -539,7 +540,7 @@ begin
     begin
       if (TSongMenuMode(Ini.SongMenu) <> smList) then
       begin
-        AudioPlayback.PlaySound(SoundLib.Change);
+        PlayChangeSound;
         SelectPrev;
         SetScrollRefresh;
       end
@@ -591,7 +592,7 @@ begin
           FixSelected;
 
           //Play Music:
-          AudioPlayback.PlaySound(SoundLib.Change);
+          PlayChangeSound;
         end;
         //Cat Change Hack End}
       end
@@ -657,7 +658,7 @@ begin
           FixSelected;
 
           //Play Music:
-          AudioPlayback.PlaySound(SoundLib.Change);
+          PlayChangeSound;
         end;
         //Cat Change Hack End}
       end
@@ -746,7 +747,7 @@ begin
               begin
                 SkipTo(CatSongs.VisibleIndex((I + Interaction) mod I2), (I + Interaction) mod I2, VS);
 
-                AudioPlayback.PlaySound(SoundLib.Change);
+                PlayChangeSound;
 
                 SetScrollRefresh;
                 //Break and Exit
@@ -781,7 +782,7 @@ begin
               begin
                 SkipTo(CatSongs.VisibleIndex((I + Interaction) mod I2), (I + Interaction) mod I2, VS);
 
-                AudioPlayback.PlaySound(SoundLib.Change);
+                PlayChangeSound;
 
                 SetScrollRefresh;
 
@@ -811,7 +812,7 @@ begin
                (UCS4UpperCase(UTF8ToUCS4String(TempStr)[0]) <> UpperLetter) then
             begin
               SkipTo(CatSongs.VisibleIndex((I + Interaction) mod I2), (I + Interaction) mod I2, VS);
-              AudioPlayback.PlaySound(SoundLib.Change);
+              PlayChangeSound;
               SetScrollRefresh;
               Exit;
             end;
@@ -829,7 +830,7 @@ begin
                (UCS4UpperCase(UTF8ToUCS4String(TempStr)[0]) <> UpperLetter) then
             begin
               SkipTo(CatSongs.VisibleIndex((I + Interaction) mod I2), (I + Interaction) mod I2, VS);
-              AudioPlayback.PlaySound(SoundLib.Change);
+              PlayChangeSound;
               SetScrollRefresh;
               Exit;
             end;
@@ -1072,7 +1073,7 @@ begin
                 Inc(NextRandomSongIdx);
               end
             end;
-            AudioPlayback.PlaySound(SoundLib.Change);
+            PlayChangeSound;
 
             SetScrollRefresh;
           end;
@@ -1770,6 +1771,7 @@ begin
     CoverLoader := TCoverLoader.Create(512, 240);
   CoverLoader.OnEvict := CoverEvicted;
   CoverLoader.InUse := CoverInUse;
+  CoverLoader.SetShape(Theme.Song.CoverSquare, Theme.Song.CoverRadius);
 
   LoadFromTheme(Theme.Song);
 
@@ -3601,11 +3603,7 @@ var
 begin
   VS := CatSongs.VisibleSongs;
 
-  if (SDL_GetTicks - LastChangeSoundTime >= CHANGE_SOUND_THROTTLE_MS) then
-  begin
-    AudioPlayback.PlaySound(SoundLib.Change);
-    LastChangeSoundTime := SDL_GetTicks;
-  end;
+  PlayChangeSound;
 
   if VS > 0 then
   begin
@@ -3675,11 +3673,7 @@ begin
   OriginalInteraction := Interaction;
   VS := CatSongs.VisibleSongs;
 
-  if (SDL_GetTicks - LastChangeSoundTime >= CHANGE_SOUND_THROTTLE_MS) then
-  begin
-    AudioPlayback.PlaySound(SoundLib.Change);
-    LastChangeSoundTime := SDL_GetTicks;
-  end;
+  PlayChangeSound;
 
   if (VS > 0) then
   begin
@@ -3738,7 +3732,7 @@ procedure TScreenSong.SelectNextListRow;
 var
   Orig: integer;
 begin
-  AudioPlayback.PlaySound(SoundLib.Change);
+  PlayChangeSound;
   Orig := Interaction;
   SelectNext;
 
@@ -3753,7 +3747,7 @@ procedure TScreenSong.SelectPrevListRow;
 var
   Orig: integer;
 begin
-  AudioPlayback.PlaySound(SoundLib.Change);
+  PlayChangeSound;
   Orig := Interaction;
   SelectPrev;
 
@@ -4140,7 +4134,7 @@ begin
         end;
   end;
 
-  AudioPlayback.PlaySound(SoundLib.Change);
+  PlayChangeSound;
   SetScroll;
 end;
 
@@ -4482,6 +4476,16 @@ begin
         X := X + Statics[Icons[I]].Texture.W + Theme.Song.IconGap;
       end;
   end;
+end;
+
+{ the "change" sound: when a key is held down only on the first move, not on
+  every repeat (the repeats came irregularly and sounded out of step) }
+procedure TScreenSong.PlayChangeSound;
+begin
+  if KeyIsRepeat then
+    Exit;
+  AudioPlayback.PlaySound(SoundLib.Change);
+  LastChangeSoundTime := SDL_GetTicks;
 end;
 
 { big cover of the selected song (chessboard and list) }

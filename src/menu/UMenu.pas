@@ -1002,6 +1002,14 @@ begin
   Button[Result].SelectW := ThemeButton.SelectW;
 
   Button[Result].Fade := ThemeButton.Fade;
+  Button[Result].SelectScale := ThemeButton.SelectScale;
+  Button[Result].DeselectAlpha := ThemeButton.DAlpha;
+  if (ThemeButton.IconTex <> '') then
+    Button[Result].SetIcon(Renderer.GetTexture(Skin.GetTextureFileName(ThemeButton.IconTex), TEXTURE_TYPE_TRANSPARENT),
+      ThemeButton.IconX, ThemeButton.IconY, ThemeButton.IconW, ThemeButton.IconH,
+      ThemeButton.IconColR, ThemeButton.IconColG, ThemeButton.IconColB,
+      ThemeButton.IconDColR, ThemeButton.IconDColG, ThemeButton.IconDColB,
+      ThemeButton.IconScale, ThemeButton.IconSpin, ThemeButton.IconWobble);
   Button[Result].FadeText := ThemeButton.FadeText;
   if (ThemeButton.Typ = TEXTURE_TYPE_COLORIZED) then
   begin
@@ -1641,6 +1649,7 @@ begin
 
   SelectsS[High(SelectsS)].showArrows := ThemeSelectS.showArrows;
   SelectsS[High(SelectsS)].UseSTUColor := ThemeSelectS.UseSTUColor;
+  SelectsS[High(SelectsS)].DAlpha := ThemeSelectS.DAlpha;
   SelectsS[High(SelectsS)].STUColR := ThemeSelectS.STUColR;
   SelectsS[High(SelectsS)].STUColG := ThemeSelectS.STUColG;
   SelectsS[High(SelectsS)].STUColB := ThemeSelectS.STUColB;
