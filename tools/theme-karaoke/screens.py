@@ -307,8 +307,8 @@ def players(b):
 
     # number of players (top right, in the header)
     ini.set("NameSelectPlayerCount", od(
-        X=W - M - 248, Y=96, W=120, H=44, SkipX=8, SBGW=120, Text="NAME_PLAYERS_COUNT", TextSize=16,
-        Tex=a.panel(120, 44, 12), Type="Transparent", TexSBG=a.panel(120, 44, 12), TypeSBG="Transparent",
+        X=W - M - 288, Y=96, W=160, H=44, SkipX=8, SBGW=120, Text="NAME_PLAYERS_COUNT", TextSize=16,
+        Tex=a.panel(160, 44, 12), Type="Transparent", TexSBG=a.panel(120, 44, 12), TypeSBG="Transparent",
         Color="Surface2", DColor="Bg", TColor="Text", TDColor="Text2",
         SBGColor="Accent", SBGDColor="Surface2", STColor="OnAccent", STUColor="Text", STDColor="Text",
         ArrowW=24, ArrowH=24))
@@ -350,12 +350,6 @@ def players(b):
                SBGDColor="PlayerDark", SBGColor="PlayerLight", STColor="OnAccent", STDColor="OnAccent", Z=1)
     ini.set("NameSelectPlayerColor", OrderedDict(slide, Y="0", Text="Color"))
     ini.set("NameSelectPlayerLevel", OrderedDict(slide, X="-4000", Y="0", Text="PARTY_DIFFICULTY"))
-
-    # where Enter goes
-    bw = 236
-    s.panel(W - M - bw, 604, bw, 44, r=22, color="Accent")
-    s.text(W - M - bw + 26, 615, "Elegir canción", size=18, color="OnAccent", style=BOLD)
-    s.icon(W - M - 46, 614, 24, "arrow_right", color="OnAccent")
 
     s.footer([("ButtonNavi", "Navegar"), ("ButtonAZ", "Escribir nombre"), ("ButtonEnter", "Elegir canción"),
               ("ButtonEsc", "Atrás")])
@@ -583,31 +577,33 @@ def sing(b):
         LineColor="ScrimText", LineAlpha=0.18,
         LaneTex=a.panel(LANE_W, LANE_H, 20), LaneLeft=LANE_X, LaneRight=LANE_X + LANE_W,
         LanePadTop=10, LanePadBottom=LANE_H - 9 * LS - 10, LaneColor="Scrim", LaneAlpha=0,
-        HudW=0, HudAlpha=0))
+        HudW=0, HudAlpha=0, NameBoxPad=10))
 
-    # score of each player: one row at the right end, just above its staff,
-    # without any panel: like the notes, the texts carry only a soft shadow
-    # (Shadow) so they read over any video. ScoreBG is empty (W = 0).
+    # each player's row just above its staff, without any panel: the name in
+    # a box of the player's colour at the left end (the game sizes the box to
+    # the name, NameBoxPad, and picks a dark or light text); the sing bar and
+    # the score at the right end, with a soft shadow (Shadow) so they read
+    # over any video. ScoreBG is empty (W = 0).
     ini.set("SingDefaultScoreBG", od(Tex="ScoreBG", W=0, H=PILL_H, Type="Colorized"))
-    # line bonus: a badge that pops up at the left end of the same row
+    # line bonus: a badge that pops up left of the sing bar
     ini.set("SingLineBonus", od(W=150, H=PILL_H - 4, Y=2, Size=16, Font=FONT_INTER, Style=1))
 
+    L = LANE_X + 24                          # left end of the row
     R = LANE_X + LANE_W - 8                  # right end of the row
 
     def player(prefix, lane_top, color):
         top = lane_top - PILL_H
-        ini.set("Sing%sStatic" % prefix, od(X=R - 222, Y=top + 9, W=14, H=14, Tex=a.circle(14),
+        ini.set("Sing%sStatic" % prefix, od(X=L, Y=top + 2, W=120, H=28, Tex=a.panel(160, 28, 8),
                                             Color=color, Type="Transparent", Alpha=1))
-        ini.set("Sing%sAvatar" % prefix, od(X=R - 222, Y=top + 9, W=0, H=0, Z=1, Alpha=0))
-        ini.set("Sing%sText" % prefix, od(X=R - 232, Y=top + 4, W=260, H=22, MinSize=13, Text="PLAYERNAME",
-                                          Font=FONT_INTER, Style=BOLD, Size=18, Color="ScrimText", Align=2,
-                                          Shadow=3))
+        ini.set("Sing%sAvatar" % prefix, od(X=L, Y=top + 2, W=0, H=0, Z=1, Alpha=0))
+        ini.set("Sing%sText" % prefix, od(X=L + 10, Y=top + 6, W=300, H=20, MinSize=12, Text="PLAYERNAME",
+                                          Font=FONT_INTER, Style=BOLD, Size=17, Color="ScrimText", Align=0))
         # X/Y place the line bonus badge (centred on X, see SingLineBonus)
-        ini.set("Sing%sStatic2" % prefix, od(X=LANE_X + 24 + 75, Y=top, W=0, H=PILL_H))
+        ini.set("Sing%sStatic2" % prefix, od(X=R - 198 - 16 - 75, Y=top, W=0, H=PILL_H))
         ini.set("Sing%sTextScore" % prefix, od(Text="00000", X=R - 74, Y=top + 1, Font=FONT_MONO, Style=BOLD,
                                                Size=24, Color="ScrimText", Align=0, Shadow=3))
         ini.set("Sing%sSingBar" % prefix, od(X=R - 198, Y=top + 12, W=110, H=8))
-        ini.set("Sing%sOscilloscope" % prefix, od(X=LANE_X + 24 + 162, Y=top + 4, W=150, H=24))
+        ini.set("Sing%sOscilloscope" % prefix, od(X=R - 496, Y=top + 4, W=120, H=24))
 
     player("P1", LANES[1], "P1Dark")          # one player: lower lane, next to the lyrics
     player("P1TwoP", LANES[0], "P1Dark")
@@ -1154,6 +1150,13 @@ def build(b):
         Color="Surface2", DColor="Bg", DAlpha=0, TColor="Text", TDColor="Text2",
         SBGColor="Accent", SBGDColor="Surface", STColor="OnAccent", STUColor="Text", STDColor="Text3",
         TextSize=18), replace=False)
+    # select slides: Inter for the label and the values (not the base font),
+    # chevrons in the colour of the value text
+    for name, kv in b.ini.sections.items():
+        if "SkipX" in kv or "SBGW" in kv or name.endswith("SelectSlide"):
+            kv.setdefault("Font", str(FONT_INTER))
+            kv.setdefault("Style", str(REGULAR))
+            kv["ArrowTint"] = "1"
     # select slide arrows: drawn at the size of the icons
     for name, kv in b.ini.sections.items():
         if "ArrowW" in kv or name.endswith("SelectSlide"):

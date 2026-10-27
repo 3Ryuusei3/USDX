@@ -298,7 +298,7 @@ class Builder:
                           ("JukeboxFix", "pin"), ("JukeboxSongMenuPlayPause", "play"),
                           ("JukeboxSongMenuNext", "next"), ("JukeboxSongMenuPrevious", "prev"),
                           ("JukeboxSongMenuPlaylist", "list"),
-                          ("Select_ArrowLeft", "arrow_left"), ("Select_ArrowRight", "arrow_right")):
+                          ("Select_ArrowLeft", "chev_left"), ("Select_ArrowRight", "chev_right")):
             put(tex, a.icon(icon))
 
         # simple shapes used by the code
@@ -367,10 +367,8 @@ class Builder:
                                          ("Creator", "Karaoke")]))
             tex = OrderedDict(self.skin_tex)
             tex["K_bg"] = bg_file
-            # select slide arrows (the game does not tint them)
-            for k in ("Select_ArrowLeft", "Select_ArrowRight"):
-                n = self.assets.tinted(os.path.splitext(self.skin_tex[k])[0], p["Text2"], "_" + file)
-                tex[k] = self.assets.files[n]
+            # select slide arrows: white chevrons, the game tints them in the
+            # colour of the value text (ArrowTint)
             # rating ladder in the skin's own tones
             cols = (p["Text"] + (255,), p["Muted"] + (255,), p["Line"] + (255,))
             for i in range(8):

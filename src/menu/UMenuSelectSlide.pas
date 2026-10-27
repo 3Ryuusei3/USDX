@@ -73,6 +73,9 @@ type
 
       //Arrows on/off
       showArrows: boolean;      //default is false
+      // font of the label and the values; arrows in the colour of the value
+      FontFamily, FontStyle: integer;
+      ArrowTint: boolean;
 
       //whether to show one item or all that fit into the select
       oneItemOnly: boolean;      //default is false
@@ -655,8 +658,8 @@ begin
     else
       MaxLen := TextureSBG.W;
 
-    SetFontFamily(0);
-    SetFontStyle(ftRegular);
+    SetFontFamily(FontFamily);
+    SetFontStyle(FontStyle);
     SetFontSize(Text.Size);
 
     // we will remove min. 2 letters by default and replace them w/ points
@@ -758,6 +761,15 @@ begin
 
     if showArrows then
     begin
+      if ArrowTint and (CurSelText >= 0) and (CurSelText <= High(TextOpt)) then
+      begin
+        Tex_SelectS_ArrowL.ColR := TextOpt[CurSelText].ColR;
+        Tex_SelectS_ArrowL.ColG := TextOpt[CurSelText].ColG;
+        Tex_SelectS_ArrowL.ColB := TextOpt[CurSelText].ColB;
+        Tex_SelectS_ArrowR.ColR := TextOpt[CurSelText].ColR;
+        Tex_SelectS_ArrowR.ColG := TextOpt[CurSelText].ColG;
+        Tex_SelectS_ArrowR.ColB := TextOpt[CurSelText].ColB;
+      end;
       Renderer.DrawTexture(self.Tex_SelectS_ArrowL);
       Renderer.DrawTexture(self.Tex_SelectS_ArrowR);
     end;
@@ -796,8 +808,8 @@ var
   maxlength: single;
   I:         integer;
 begin
-  SetFontFamily(0);
-  SetFontStyle(ftRegular{Text.Style});
+  SetFontFamily(FontFamily);
+  SetFontStyle(FontStyle);
   SetFontSize(Text.Size);
   maxlength := 0;
 
@@ -835,7 +847,8 @@ begin
     TextOpt[I] := TText.Create;
     TextOpt[I].Size := Text.Size;
     TextOpt[I].Visible := true;
-    TextOpt[I].Style := 0;
+    TextOpt[I].Font := FontFamily;
+    TextOpt[I].Style := FontStyle;
 
     TextOpt[I].ColR := STDColR;
     TextOpt[I].ColG := STDColG;

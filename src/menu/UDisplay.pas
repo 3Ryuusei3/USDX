@@ -794,17 +794,10 @@ end;
 procedure TDisplay.DrawDebugInformation;
 var
   Ticks: cardinal;
+  I, Family: integer;
+  S: UTF8String;
 begin
   Renderer.DepthTest := false;
-  // Some White Background for information
-  Renderer.DrawQuad(690, 0, 0, 110, 35, 1, 1, 1, 0.5);
-
-  // set font specs
-  SetFontFamily(0);
-  SetFontStyle(ftRegular);
-  SetFontSize(21);
-  SetFontItalic(false);
-  SetFontColor(0, 0, 0, 1);
 
   // calculate fps
   Ticks := SDL_GetTicks();
@@ -817,15 +810,26 @@ begin
 
   Inc(FPSCounter);
 
-  // draw text
-
-  // fps
-  SetFontPos(695, 0);
-  PrintText ('FPS: ' + InttoStr(LastFPS));
-
-  SetFontPos(695, 13);
-  SetFontColor(0.8, 0.5, 0.2, 1);
-  PrintText ('Game.Debug');
+  // just the number, small and monospaced, in the top right corner, with a
+  // soft shadow so it reads on any background
+  Family := 0;
+  for I := 0 to High(FontFamilyNames) do
+    if (FontFamilyNames[I] = 'JetBrains Mono') then
+      Family := I;
+  SetFontFamily(Family);
+  SetFontStyle(ftBold);
+  SetFontSize(16);
+  SetFontItalic(false);
+  SetFontReflection(false, 0);
+  SetFontColor(0.95, 0.95, 0.94, 0.9);
+  S := InttoStr(LastFPS);
+  SetFontPos(RenderW - 12 - TextWidth(S), 6);
+  SetFontZ(1);
+  FontShadow := 2;
+  PrintText(S);
+  FontShadow := 0;
+  SetFontFamily(0);
+  SetFontStyle(ftRegular);
   Renderer.DepthTest := true;
 end;
 

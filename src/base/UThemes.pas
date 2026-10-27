@@ -267,6 +267,8 @@ type
     STUColR, STUColG, STUColB:            real;
     DAlpha:                               real;   // label box opacity while not selected
     UseSTUColor:                          boolean;
+    Font, Style:                          integer; // of the label and the values (default 0, regular)
+    ArrowTint:                            boolean; // the arrows take the colour of the value text
     SkipX:    integer;
   end;
 
@@ -617,6 +619,7 @@ type
       HudTex: string;
       HudW: integer;
       HudX, HudY, HudH: integer;            // offset from the lane's corner; height (0: the lane's)
+      NameBoxPad: integer;                  // > 0: the player static becomes a box around the name
       HudAlpha: real;
       LanePad3: integer;                    // side room of the 3-row veils
       MissScale: real;                      // height of sung notes that miss the tone
@@ -2475,6 +2478,7 @@ begin
     HudX         := ReadInteger(SectionList, 'HudX', 0);
     HudY         := ReadInteger(SectionList, 'HudY', 0);
     HudH         := ReadInteger(SectionList, 'HudH', 0);
+    NameBoxPad   := ReadInteger(SectionList, 'NameBoxPad', 0);
     HudAlpha     := ReadFloat(SectionList, 'HudAlpha', 0);
     LanePad3     := ReadInteger(SectionList, 'LanePad3', 16);
     MissScale    := ReadFloat(SectionList, 'MissScale', 0.65);
@@ -3001,6 +3005,9 @@ begin
 
   ThemeSelectS.UseSTUColor := ColorExists(ReadString(SectionList, 'STUColor', '')) >= 0;
   ThemeSelectS.DAlpha := ReadFloat(SectionList, 'DAlpha', 1);
+  ThemeSelectS.Font := ReadInteger(SectionList, 'Font', 0);
+  ThemeSelectS.Style := ReadInteger(SectionList, 'Style', 0);
+  ThemeSelectS.ArrowTint := ReadBool(SectionList, 'ArrowTint', false);
   LoadColor(ThemeSelectS.STUColR, ThemeSelectS.STUColG, ThemeSelectS.STUColB, ReadString(SectionList, 'STUColor', ''));
 
   ThemeSelectS.showArrows := ReadBool(SectionList, 'ShowArrows', false);

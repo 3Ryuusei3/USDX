@@ -1625,6 +1625,11 @@ begin
     Skin.GetTextureFileName(ThemeSelectS.Tex), ThemeSelectS.Typ,
     Skin.GetTextureFileName(ThemeSelectS.TexSBG), ThemeSelectS.TypSBG,
     ThemeSelectS.Text, Data);
+  SelectsS[High(SelectsS)].FontFamily := ThemeSelectS.Font;
+  SelectsS[High(SelectsS)].FontStyle := ThemeSelectS.Style;
+  SelectsS[High(SelectsS)].ArrowTint := ThemeSelectS.ArrowTint;
+  SelectsS[High(SelectsS)].Text.Font := ThemeSelectS.Font;
+  SelectsS[High(SelectsS)].Text.Style := ThemeSelectS.Style;
   for SO := 0 to High(Values) do
     AddSelectSlideOption(Values[SO]);
 

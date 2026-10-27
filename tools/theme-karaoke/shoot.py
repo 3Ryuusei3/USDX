@@ -14,7 +14,7 @@ HOME = "/tmp/usdxhome"
 DISPLAY = ":77"
 
 
-def write_config(theme="Karaoke", skin="Negro", songmenu="Roulette", players="1", extra="", res="1280x720", fullscreen="Off"):
+def write_config(theme="Karaoke", skin="Negro", songmenu="Roulette", players="1", extra="", res="1280x720", fullscreen="Off", debug="Off"):
     cfgdir = "/home/claude/usdx/game"
     os.makedirs(cfgdir, exist_ok=True)
     with open(os.path.join(cfgdir, "config.ini"), "w") as f:
@@ -23,6 +23,7 @@ Language=Spanish
 SongMenu={songmenu}
 Players={players}
 Tabs=Off
+Debug={debug}
 [Graphics]
 Resolution={res}
 ResolutionFullscreen={res}

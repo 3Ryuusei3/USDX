@@ -19,8 +19,9 @@ re-discovering the code.
   https://claude.ai/artifact/PKqP4DQtMu4qKkppRTcyEb). It has one artboard per
   screen: Main, Players, SongSelect (list), SongRoulette, SongGrid (chessboard),
   Sing, Score, Options (microphones page), OptionsGrid, Loading, System.
-  - Most artboards are written by a generator script that copies the game's
-    coordinates.
+  - Most artboards are written by `tools/theme-karaoke/gen_design.py <project dir>`,
+    which copies the game's coordinates. Read the canvas files first: the
+    script needs the existing `Main.dc.html` for its theme helper.
   - When a screen changes, update its artboard too.
 
 ## Theme generator (`tools/theme-karaoke/`)
@@ -65,6 +66,9 @@ python3 tools/theme-karaoke/build_theme.py      # writes Karaoke.ini, skins, PNG
   - `TextDX`: the texts of the selected button slide right.
 - **Select slides** (`UMenuSelectSlide`): colour easing, value slide-in, DAlpha,
   STUColor.
+  - `Font`/`Style` set the label and value font (the default was family 0).
+  - `ArrowTint=1` tints the arrows, which are white chevrons, in the value's
+    colour.
 - **Background** (`UMenuBackgroundTexture`): `Motion=1` makes a 1.3× image drift.
 - **Song menu** (`UScreenSong`, `UCoverLoader`)
   - Chessboard layout: a 5×4 grid, then a wide card with a 232 px cover, the
@@ -97,10 +101,12 @@ python3 tools/theme-karaoke/build_theme.py      # writes Karaoke.ini, skins, PNG
     `Sing<P>Static2.X`, with Y relative to it.
   - Karaoke layout:
     - Lanes for 1 and 2 players are at y 92 and 408 (LS 18).
-    - Each player's row sits right-aligned just above its staff: name, colour
-      dot, sing bar and score.
-    - The row has no panel: the texts carry `Shadow=3`.
-    - The line bonus badge sits at the left end of the row.
+    - Each player's row sits just above its staff.
+    - At the left is the name in a box of the player's colour. The game sizes
+      the box to the name (`[SingNoteArea] NameBoxPad`, FitNameBox in
+      UScreenSingView) and picks dark or light text.
+    - At the right are the sing bar and the score (`Shadow=3`); the line bonus
+      badge sits left of the bar and the oscilloscope left of that.
     - The duet lyrics bar is between the lanes; the main lyrics bar is at y 596
       with H 104.
 - **Loading screen** (`UScreenLoading`): status in words (`LOADING_*` language
@@ -111,6 +117,8 @@ python3 tools/theme-karaoke/build_theme.py      # writes Karaoke.ini, skins, PNG
     texts fade in.
   - It only redraws when the loader reports progress (at most every 30 ms).
 - **Name**: window title and Info.plist say "UltraStar Core".
+- **Debug FPS** (UDisplay.DrawDebugInformation): just the number, top right,
+  JetBrains Mono with a shadow.
 
 ## Build and test (Linux container)
 
