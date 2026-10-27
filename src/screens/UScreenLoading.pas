@@ -41,6 +41,10 @@ uses
   sdl2;
 
 type
+  TRect4 = record
+    X, Y, W, H: real;
+  end;
+
   TScreenLoading = class(TMenu)
     private
       DiscoveryBarBaseIndex: integer;
@@ -52,6 +56,13 @@ type
       DiscoveryBarAlpha: real;
       LoadingBarAlpha: real;
       LastRedrawTicks: cardinal;
+      // animated mark (see TThemeLoading.Mark*)
+      StartTicks: cardinal;
+      NoteBase: array of TRect4;
+      LineBase, DotBase: TRect4;
+      TextBaseY: array of real;
+      procedure AnimateMark;
+      procedure StoreMark;
       function ClampProgress(Current, Total: integer): real;
       function AddProgressOverlay(SourceBarIndex: integer; Alpha: real): integer;
       procedure UpdateBar(BaseBarIndex, FillBarIndex: integer; Progress, BaseAlpha, FillAlpha: real);
@@ -62,6 +73,7 @@ type
 
       constructor Create; override;
       procedure OnShow; override;
+      function Draw: boolean; override;
       function ParseInput(PressedKey: cardinal; CharCode: UCS4Char; PressedDown: boolean): boolean; override;
       procedure SetDiscoveryProgress(Current, Total, SongsFound: integer);
       procedure SetSongLoadingProgress(Current, Total: integer);
@@ -72,6 +84,7 @@ type
 implementation
 
 uses
+  Math,
   UGraphic,
   UDisplay,
   ULanguage,
@@ -130,6 +143,7 @@ begin
     StatusTextBase := '';
   end;
 
+  StoreMark;
   LastRedrawTicks := 0;
   UpdateBar(DiscoveryBarBaseIndex, DiscoveryBarFillIndex, 0, DiscoveryBarAlpha * TrackAlpha, DiscoveryBarAlpha);
   UpdateBar(LoadingBarBaseIndex, LoadingBarFillIndex, 0, LoadingBarAlpha * TrackAlpha, LoadingBarAlpha);
@@ -141,6 +155,137 @@ end;
 procedure TScreenLoading.OnShow;
 begin
   inherited;
+end;
+
+function StaticRect(S: TStatic): TRect4;
+begin
+  Result.X := S.Texture.X;
+  Result.Y := S.Texture.Y;
+  Result.W := S.Texture.W;
+  Result.H := S.Texture.H;
+end;
+
+procedure TScreenLoading.StoreMark;
+var
+  I: integer;
+begin
+  StartTicks := SDL_GetTicks();
+  SetLength(NoteBase, Length(Theme.Loading.MarkNotes));
+  for I := 0 to High(NoteBase) do
+    if (Theme.Loading.MarkNotes[I] >= 0) and (Theme.Loading.MarkNotes[I] < Length(Statics)) then
+      NoteBase[I] := StaticRect(Statics[Theme.Loading.MarkNotes[I]]);
+  if (Theme.Loading.MarkLine >= 0) and (Theme.Loading.MarkLine < Length(Statics)) then
+    LineBase := StaticRect(Statics[Theme.Loading.MarkLine]);
+  if (Theme.Loading.MarkDot >= 0) and (Theme.Loading.MarkDot < Length(Statics)) then
+    DotBase := StaticRect(Statics[Theme.Loading.MarkDot]);
+  SetLength(TextBaseY, Length(Theme.Loading.MarkTexts));
+  for I := 0 to High(TextBaseY) do
+    if (Theme.Loading.MarkTexts[I] >= 0) and (Theme.Loading.MarkTexts[I] < Length(Text)) then
+      TextBaseY[I] := Text[Theme.Loading.MarkTexts[I]].Y;
+end;
+
+const
+  MARK_PERIOD = 2600;  // ms of one pass of the pitch marker
+  MARK_INTRO = 700;    // ms of the fade in of the texts
+
+{ the mark comes alive: the pitch marker runs over the note bars again and
+  again, its dot rides on the bar under it, and each bar lights up and swells
+  a little while it is being "sung"; the texts rise and fade in at the start }
+procedure TScreenLoading.AnimateMark;
+var
+  T, P, MX, X1, X2, E, Lit, DotY, Swell: real;
+  I, Under, Prev, Next: integer;
+  Now: cardinal;
+  S: TStatic;
+  function NoteCY(N: integer): real;
+  begin
+    Result := NoteBase[N].Y + NoteBase[N].H / 2;
+  end;
+begin
+  if (Length(NoteBase) = 0) or (Theme.Loading.MarkLine < 0) then
+    Exit;
+  Now := SDL_GetTicks();
+  T := Now - StartTicks;
+
+  // texts: rise and fade in
+  E := Min(1, T / MARK_INTRO);
+  E := 1 - (1 - E) * (1 - E) * (1 - E);
+  for I := 0 to High(TextBaseY) do
+    if (Theme.Loading.MarkTexts[I] >= 0) and (Theme.Loading.MarkTexts[I] < Length(Text)) then
+    begin
+      Text[Theme.Loading.MarkTexts[I]].Y := TextBaseY[I] + 14 * (1 - E);
+      Text[Theme.Loading.MarkTexts[I]].Alpha := E;
+    end;
+
+  // marker position: from a bit before the first bar to a bit after the last
+  X1 := NoteBase[0].X - 16;
+  X2 := NoteBase[High(NoteBase)].X + NoteBase[High(NoteBase)].W + 16;
+  P := Frac(T / MARK_PERIOD);
+  // ease in and out, so it rests briefly at both ends
+  P := P * P * (3 - 2 * P);
+  MX := X1 + (X2 - X1) * P;
+
+  // the bar under the marker (or the neighbours around it)
+  Under := -1;
+  Prev := -1;
+  Next := -1;
+  for I := 0 to High(NoteBase) do
+  begin
+    if (MX >= NoteBase[I].X) and (MX <= NoteBase[I].X + NoteBase[I].W) then
+      Under := I;
+    if (NoteBase[I].X + NoteBase[I].W < MX) then
+      Prev := I;
+    if (Next < 0) and (NoteBase[I].X > MX) then
+      Next := I;
+  end;
+  if (Under >= 0) then
+    DotY := NoteCY(Under)
+  else if (Prev >= 0) and (Next >= 0) then
+  begin
+    E := (MX - (NoteBase[Prev].X + NoteBase[Prev].W)) / Max(1, NoteBase[Next].X - (NoteBase[Prev].X + NoteBase[Prev].W));
+    E := E * E * (3 - 2 * E);
+    DotY := NoteCY(Prev) + (NoteCY(Next) - NoteCY(Prev)) * E;
+  end
+  else if (Next >= 0) then
+    DotY := NoteCY(Next)
+  else
+    DotY := NoteCY(High(NoteBase));
+
+  // the bars: dim until the marker reaches them, lit after it, swelling
+  // while it is on them; all fade back at the end of the pass
+  for I := 0 to High(NoteBase) do
+  begin
+    if (Theme.Loading.MarkNotes[I] < 0) or (Theme.Loading.MarkNotes[I] >= Length(Statics)) then
+      Continue;
+    S := Statics[Theme.Loading.MarkNotes[I]];
+    if (MX <= NoteBase[I].X) then
+      Lit := 0
+    else
+      Lit := Min(1, (MX - NoteBase[I].X) / Max(1, NoteBase[I].W));
+    Swell := 0;
+    if (I = Under) then
+      Swell := Sin(Pi * (MX - NoteBase[I].X) / Max(1, NoteBase[I].W));
+    S.Texture.Alpha := 0.35 + 0.65 * Lit;
+    S.Texture.H := NoteBase[I].H * (1 + 0.35 * Swell);
+    S.Texture.W := NoteBase[I].W + 4 * Swell;
+    S.Texture.X := NoteBase[I].X - 2 * Swell;
+    S.Texture.Y := NoteBase[I].Y - (S.Texture.H - NoteBase[I].H) / 2;
+  end;
+
+  S := Statics[Theme.Loading.MarkLine];
+  S.Texture.X := MX - LineBase.W / 2;
+  if (Theme.Loading.MarkDot >= 0) and (Theme.Loading.MarkDot < Length(Statics)) then
+  begin
+    S := Statics[Theme.Loading.MarkDot];
+    S.Texture.X := MX - DotBase.W / 2;
+    S.Texture.Y := DotY - DotBase.H / 2;
+  end;
+end;
+
+function TScreenLoading.Draw: boolean;
+begin
+  AnimateMark;
+  Result := inherited Draw;
 end;
 
 function TScreenLoading.ClampProgress(Current, Total: integer): real;
@@ -244,7 +389,7 @@ begin
     Exit;
 
   NowTicks := SDL_GetTicks;
-  if not Force and (LastRedrawTicks <> 0) and (NowTicks - LastRedrawTicks < 100) then
+  if not Force and (LastRedrawTicks <> 0) and (NowTicks - LastRedrawTicks < 30) then
     Exit;
 
   Self.Draw;

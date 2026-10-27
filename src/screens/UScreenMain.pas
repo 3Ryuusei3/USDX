@@ -56,6 +56,7 @@ type
     // pictures of the entries (theme) and their fade-in on a change
     Preview:      array[0..7] of array of integer;
     PreviewX, PreviewY, PreviewAlpha: array[0..7] of array of real;
+    PreviewW, PreviewH: array[0..7] of array of real;
     DescY, DescLongY: real;
     ChangeTicks:  cardinal;
     procedure AnimatePreview;
@@ -78,6 +79,7 @@ var
 implementation
 
 uses
+  Math,
   UGraphic,
   UHelp,
   UIni,
@@ -302,12 +304,16 @@ begin
     SetLength(PreviewX[I], Length(Theme.Main.Preview[I]));
     SetLength(PreviewY[I], Length(Theme.Main.Preview[I]));
     SetLength(PreviewAlpha[I], Length(Theme.Main.Preview[I]));
+    SetLength(PreviewW[I], Length(Theme.Main.Preview[I]));
+    SetLength(PreviewH[I], Length(Theme.Main.Preview[I]));
     for J := 0 to High(Theme.Main.Preview[I]) do
     begin
       Preview[I][J] := AddStatic(Theme.Main.Preview[I][J]);
       PreviewX[I][J] := Statics[Preview[I][J]].Texture.X;
       PreviewY[I][J] := Statics[Preview[I][J]].Texture.Y;
       PreviewAlpha[I][J] := Statics[Preview[I][J]].Texture.Alpha;
+      PreviewW[I][J] := Statics[Preview[I][J]].Texture.W;
+      PreviewH[I][J] := Statics[Preview[I][J]].Texture.H;
       Statics[Preview[I][J]].Visible := false;
     end;
   end;
@@ -352,8 +358,10 @@ end;
 procedure TScreenMain.AnimatePreview;
 var
   I, J: integer;
-  T, E: real;
+  T, E, V, S, NX, NY, NW, NH: real;
+  Now: cardinal;
 begin
+  Now := SDL_GetTicks();
   if (ChangeTicks = 0) then
     T := 1
   else
@@ -374,9 +382,39 @@ begin
         else if (T < 0) then
           T := 0;
         T := 1 - (1 - T) * (1 - T) * (1 - T);
-        Statics[Preview[I][J]].Texture.Alpha := PreviewAlpha[I][J] * T;
-        Statics[Preview[I][J]].Texture.X := PreviewX[I][J] + (1 - T) * 24;
-        Statics[Preview[I][J]].Texture.Y := PreviewY[I][J];
+        // then they keep moving a little while the entry stays selected
+        with Theme.Main.Preview[I][J] do
+        begin
+          V := 0;
+          if (IdlePeriod > 0) then
+          begin
+            V := Frac(Now / IdlePeriod + IdlePhase);
+            if (IdleWave = 1) then
+            begin
+              // 0 -> 1 -> 0, resting a moment at both ends
+              V := 1 - Abs(2 * V - 1);
+              V := V * V * (3 - 2 * V);
+            end
+            else
+              V := Sin(2 * Pi * V);
+          end;
+          // the motion grows in after the arrival
+          V := V * T;
+          NW := PreviewW[I][J] + IdleDW * V;
+          NH := PreviewH[I][J] + IdleDH * V;
+          NX := PreviewX[I][J] + (1 - T) * 24 + IdleDX * V;
+          NY := PreviewY[I][J] + IdleDY * V - IdleDH * V;
+          S := 1 + IdleScale * V;
+          Statics[Preview[I][J]].Texture.W := NW * S;
+          Statics[Preview[I][J]].Texture.H := NH * S;
+          Statics[Preview[I][J]].Texture.X := NX - NW * (S - 1) / 2;
+          Statics[Preview[I][J]].Texture.Y := NY - NH * (S - 1) / 2;
+          Statics[Preview[I][J]].Texture.Rot := IdleRot * V * Pi / 180;
+          if (IdleWave = 1) then
+            Statics[Preview[I][J]].Texture.Alpha := PreviewAlpha[I][J] * T * (1 - IdleAlpha * V)
+          else
+            Statics[Preview[I][J]].Texture.Alpha := PreviewAlpha[I][J] * T * (1 - IdleAlpha * (V / Max(T, 0.001) + 1) / 2);
+        end;
       end;
     end;
   Text[TextDescription].Alpha := E;

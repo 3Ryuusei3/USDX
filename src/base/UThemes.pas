@@ -139,6 +139,13 @@ type
     //Reflection
     Reflection:           boolean;
     Reflectionspacing:    real;
+    // idle motion (used by screens that animate their statics, e.g. the
+    // main menu previews): offsets and growth (DH grows upwards), extra
+    // scale, rotation (degrees), alpha dip; Period in ms, Phase 0..1,
+    // Wave 0 = sine, 1 = smooth back and forth between 0 and 1
+    IdleDX, IdleDY, IdleDW, IdleDH, IdleScale, IdleRot, IdleAlpha: real;
+    IdlePeriod, IdlePhase: real;
+    IdleWave: integer;
   end;
   AThemeStatic = array of TThemeStatic;
 
@@ -163,6 +170,7 @@ type
     Text:     UTF8String;
     Writable: boolean; // true -> add a blink char (|) at the end
     MinSize:  integer; // smallest size before a long text is cut (0: none)
+    Shadow:   real;    // soft dark shadow of about this many pixels (0: none)
     //Reflection
     Reflection:           boolean;
     ReflectionSpacing:    real;
@@ -207,6 +215,7 @@ type
     IconScale:  real;    // size when selected
     IconSpin:   real;    // degrees turned (eased) when it gets selected
     IconWobble: real;    // degrees of a short swing when it gets selected
+    TextDX:     real;    // the texts slide this far right while selected
     Fade:       boolean;
     FadeText:   boolean;
     DeSelectReflectionspacing : real;
@@ -305,9 +314,17 @@ type
     Oscilloscope: TThemePosition;
   end;
 
+  TIntList = array of integer;
+
   TThemeLoading = class(TThemeBasic)
     StaticAnimation:  TThemeStatic;
     TextLoading:      TThemeText;
+    // animated mark ([LoadingMark]): statics of the note bars, the pitch
+    // line and its dot (indices among the screen's statics, -1: none) and
+    // the texts that fade in (title etc.)
+    MarkNotes:        TIntList;
+    MarkLine, MarkDot: integer;
+    MarkTexts:        TIntList;
   end;
 
   TThemeMain = class(TThemeBasic)
@@ -1330,6 +1347,7 @@ type
     procedure ThemeScoreLoad;
     procedure ThemePartyLoad;
     procedure ThemeSongLoad;
+    procedure ThemeLoadLoadingMark;
     procedure ThemeSongReload;
   end;
 
@@ -1600,6 +1618,7 @@ begin
       ThemeLoadBasic(Loading, 'Loading');
       ThemeLoadText(Loading.TextLoading, 'LoadingTextLoading');
       ThemeLoadOptionalStatic(Loading.StaticAnimation, 'LoadingStaticAnimation');
+      ThemeLoadLoadingMark;
 
       // Main
       ThemeLoadBasic(Main, 'Main');
@@ -2585,6 +2604,7 @@ begin
   ThemeText.Size  := ReadInteger(SectionList, 'Size', 0);
   ThemeText.Align := ReadInteger(SectionList, 'Align', 0);
   ThemeText.MinSize := ReadInteger(SectionList, 'MinSize', 0);
+  ThemeText.Shadow := ReadFloat(SectionList, 'Shadow', 0);
 
   ThemeText.Text  := Language.Translate(ReadString(SectionList, 'Text', ''));
   ThemeText.Color := ReadString(SectionList, 'Color', '');
@@ -2663,6 +2683,16 @@ begin
   ThemeStatic.TexY2 := ReadFloat(SectionList, 'TexY2', 1);
   ThemeStatic.Reflection         := ReadBool(SectionList, 'Reflection', false);
   ThemeStatic.Reflectionspacing  := ReadFloat(SectionList, 'ReflectionSpacing', 15);
+  ThemeStatic.IdleDX     := ReadFloat(SectionList, 'IdleDX', 0);
+  ThemeStatic.IdleDY     := ReadFloat(SectionList, 'IdleDY', 0);
+  ThemeStatic.IdleDW     := ReadFloat(SectionList, 'IdleDW', 0);
+  ThemeStatic.IdleDH     := ReadFloat(SectionList, 'IdleDH', 0);
+  ThemeStatic.IdleScale  := ReadFloat(SectionList, 'IdleScale', 0);
+  ThemeStatic.IdleRot    := ReadFloat(SectionList, 'IdleRot', 0);
+  ThemeStatic.IdleAlpha  := ReadFloat(SectionList, 'IdleAlpha', 0);
+  ThemeStatic.IdlePeriod := ReadFloat(SectionList, 'IdlePeriod', 3000);
+  ThemeStatic.IdlePhase  := ReadFloat(SectionList, 'IdlePhase', 0);
+  ThemeStatic.IdleWave   := ReadInteger(SectionList, 'IdleWave', 0);
   C := ColorExists(ThemeStatic.Color);
   if C >= 0 then
   begin
@@ -2860,6 +2890,7 @@ begin
   ThemeButton.IconScale := ReadFloat(SectionList, 'IconScale', 1);
   ThemeButton.IconSpin := ReadFloat(SectionList, 'IconSpin', 0);
   ThemeButton.IconWobble := ReadFloat(SectionList, 'IconWobble', 0);
+  ThemeButton.TextDX := ReadFloat(SectionList, 'TextDX', 0);
   ThemeButton.FadeText := ReadBool(SectionList, 'FadeText', false);
 
 
@@ -4034,6 +4065,38 @@ begin
 
   CloseFile;
 
+end;
+
+procedure TTheme.ThemeLoadLoadingMark;
+  function ReadList(const S: string): TIntList;
+  var
+    Parts: TStringList;
+    I: integer;
+  begin
+    SetLength(Result, 0);
+    Parts := TStringList.Create;
+    try
+      Parts.Delimiter := ',';
+      Parts.StrictDelimiter := true;
+      Parts.DelimitedText := S;
+      for I := 0 to Parts.Count - 1 do
+        if Trim(Parts[I]) <> '' then
+        begin
+          SetLength(Result, Length(Result) + 1);
+          Result[High(Result)] := StrToIntDef(Trim(Parts[I]), -1);
+        end;
+    finally
+      Parts.Free;
+    end;
+  end;
+var
+  SL: TThemeSectionList;
+begin
+  SL := GetSectionList('LoadingMark');
+  Loading.MarkNotes := ReadList(ReadString(SL, 'Notes', ''));
+  Loading.MarkTexts := ReadList(ReadString(SL, 'Texts', ''));
+  Loading.MarkLine := ReadInteger(SL, 'Line', -1);
+  Loading.MarkDot := ReadInteger(SL, 'Dot', -1);
 end;
 
 procedure TTheme.ThemeSongLoad;

@@ -83,6 +83,7 @@ type
       // with W and H set, long texts get smaller down to MinSize; below
       // that they are cut with "..." (0: no limit)
       MinSize: single;
+      Shadow:  single;   // soft dark shadow (px, 0: none)
 
       function LineCount: integer;
 
@@ -386,6 +387,7 @@ begin
     // now use always:
     // draw text as many strings
       Y2 := Y + MoveY;
+      FontShadow := Shadow;
       for I := 0 to High(TextTiles) do
       begin
         tmpText2 := TextTiles[I];
@@ -424,6 +426,7 @@ begin
       end;
 
       // reset to default
+      FontShadow := 0;
       SetFontFamily(0);
       SetFontStyle(ftRegular);
 

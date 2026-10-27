@@ -141,7 +141,7 @@ def main_menu(b):
     tex = a.panel(row_w, row_h, 14)
     for name, label, numtxt in items:
         ini.set(name, od(X=M, Y=y, W=row_w, H=row_h, Tex=tex, Type="Transparent",
-                         Color="Surface2", DColor="Bg", Texts=2, Reflection=0, SelectScale=1.02))
+                         Color="Surface2", DColor="Bg", Texts=2, Reflection=0, SelectScale=1.02, TextDX=6))
         ini.set(name + "Text1", text_section(label, 62, 12, 28, "Text", "Text2", FONT_DISPLAY, REGULAR))
         ini.set(name + "Text2", text_section(numtxt, 20, 20, 15, "AccentText", "Text3", FONT_MONO))
         y += row_h + 4
@@ -150,7 +150,7 @@ def main_menu(b):
     small = a.panel(row_w, 44, 12)
     for name, label in (("MainButtonAbout", "Acerca de"), ("MainButtonExit", "SING_EXIT")):
         ini.set(name, od(X=M, Y=y, W=row_w, H=44, Tex=small, Type="Transparent",
-                         Color="Surface2", DColor="Bg", Texts=1, Reflection=0))
+                         Color="Surface2", DColor="Bg", Texts=1, Reflection=0, TextDX=6))
         ini.set(name + "Text1", text_section(label, 62, 11, 18, "Text", "Text3", FONT_INTER))
         y += 48
 
@@ -176,37 +176,52 @@ def main_previews(b, sx, sy, sw, sh):
         groups.append([])
         return groups[-1]
 
-    def panel(grp, x, y, w, h, r, color, outline=0, alpha=1):
+    # idle motion of a piece while its entry is selected (see TThemeStatic
+    # Idle*): keys without the "Idle" prefix, e.g. dict(DY=3, Period=2400)
+    def idle_keys(sec, idle):
+        for k, v in (idle or {}).items():
+            sec["Idle" + k] = str(v)
+
+    def panel(grp, x, y, w, h, r, color, outline=0, alpha=1, idle=None):
         tex = a.panel(w, h, r, outline=outline) if outline else a.panel(w, h, r)
         sec = od(X=sx + x, Y=sy + y, W=w, H=h, Tex=tex, Color=color, Type="Transparent")
         if alpha != 1:
             sec["Alpha"] = alpha
+        idle_keys(sec, idle)
         grp.append(sec)
 
-    def icon(grp, x, y, size, key, color):
-        grp.append(od(X=sx + x, Y=sy + y, W=size, H=size, Tex=a.icon(key, size=size), Color=color,
-                      Type="Transparent"))
+    def icon(grp, x, y, size, key, color, idle=None):
+        sec = od(X=sx + x, Y=sy + y, W=size, H=size, Tex=a.icon(key, size=size), Color=color,
+                 Type="Transparent")
+        idle_keys(sec, idle)
+        grp.append(sec)
 
     # 1 sing: stave, sung notes, the pitch marker
     st = g()
     for i in range(4):
         panel(st, 0, 30 + i * 40, sw, 1, 0, "Divider")
-    for x, y_, w, col in [(0, 103, 84, "NoteBlue"), (96, 83, 52, "NoteBlue"), (160, 63, 112, "NoteBlue"),
-                          (284, 43, 66, "Gold"), (362, 63, 44, None), (418, 103, 100, None), (530, 123, 56, None)]:
+    for i, (x, y_, w, col) in enumerate([(0, 103, 84, "NoteBlue"), (96, 83, 52, "NoteBlue"),
+                                         (160, 63, 112, "NoteBlue"), (284, 43, 66, "Gold"), (362, 63, 44, None),
+                                         (418, 103, 100, None), (530, 123, 56, None)]):
         if col:
-            panel(st, x, y_, w, 14, 7, col)
+            # the sung notes breathe one after the other
+            panel(st, x, y_, w, 14, 7, col, idle=dict(DY=-3, Period=2400, Phase=round(i * 0.12, 2)))
         else:
-            panel(st, x, y_, w, 14, 7, "Line2", outline=2)
-    panel(st, 356, 36, 2, 120, 0, "Accent")
-    panel(st, 351, 58, 12, 12, 6, "Accent")
+            # the notes still to come: a soft pulse
+            panel(st, x, y_, w, 14, 7, "Line2", outline=2,
+                  idle=dict(Alpha=0.45, Period=2400, Phase=round(i * 0.12, 2)))
+    # the pitch marker wanders a bit back and forth; its dot rides with it
+    panel(st, 356, 36, 2, 120, 0, "Accent", idle=dict(DX=48, Wave=1, Period=3600))
+    panel(st, 351, 58, 12, 12, 6, "Accent", idle=dict(DX=48, DY=-14, Wave=1, Period=3600))
 
     # 2 party: three teams on a podium
     pt = g()
     base = 176
     for i, (x, hgt, col) in enumerate(((150, 96, "NoteBlue"), (250, 140, "Accent"), (350, 70, "NoteMint"))):
         panel(pt, x, base - hgt, 84, hgt, 14, col, alpha=0.9)
-        panel(pt, x + 22, base - hgt - 52, 40, 40, 20, col)
-    icon(pt, 272, base - 140 + 18, 40, "star", "OnAccent")
+        # the heads bounce, each in its own time
+        panel(pt, x + 22, base - hgt - 52, 40, 40, 20, col, idle=dict(DY=-7, Period=1500, Phase=i * 0.3))
+    icon(pt, 272, base - 140 + 18, 40, "star", "OnAccent", idle=dict(Rot=14, Scale=0.08, Period=2600))
     panel(pt, 110, base, 364, 2, 1, "Line2")
 
     # 3 jukebox: a playlist with the song that plays
@@ -215,11 +230,13 @@ def main_previews(b, sx, sy, sw, sh):
         y_ = 20 + i * 52
         cur = i == 1
         panel(jb, 0, y_, sw, 44, 12, "Surface3" if cur else "Surface2")
-        icon(jb, 14, y_ + 10, 24, "play" if cur else "note", "Accent" if cur else "Text3")
+        icon(jb, 14, y_ + 10, 24, "play" if cur else "note", "Accent" if cur else "Text3",
+             idle=dict(Scale=0.14, Period=1200) if cur else None)
         panel(jb, 52, y_ + 14, 180 - i * 30, 8, 4, "Text2" if cur else "Line2")
         panel(jb, 52, y_ + 26, 110, 6, 3, "Line2")
     panel(jb, 0, 186, sw, 4, 2, "Line")
-    panel(jb, 0, 186, int(sw * 0.42), 4, 2, "Accent")
+    # the song plays on
+    panel(jb, 0, 186, int(sw * 0.42), 4, 2, "Accent", idle=dict(DW=int(sw * 0.3), Wave=1, Period=7000))
 
     # 4 statistics: a bar chart
     sg = g()
@@ -227,7 +244,9 @@ def main_previews(b, sx, sy, sw, sh):
     bw = 44
     gap = (sw - len(hs) * bw) // (len(hs) - 1)
     for i, hh in enumerate(hs):
-        panel(sg, i * (bw + gap), 176 - hh, bw, hh, 10, "Accent" if i == 5 else "Line2")
+        # the bars rise and fall a little, like a live meter
+        panel(sg, i * (bw + gap), 176 - hh, bw, hh, 10, "Accent" if i == 5 else "Line2",
+              idle=dict(DH=round(hh * 0.12), Period=2200, Phase=round(i * 0.17, 2)))
     panel(sg, 0, 178, sw, 2, 1, "Line")
 
     # 5 editor: piano roll with notes and the cursor
@@ -238,9 +257,11 @@ def main_previews(b, sx, sy, sw, sh):
         panel(ed, i * (sw // 8), 10, 1, 160, 0, "Divider")
     for x, y_, w, col in [(20, 116, 90, "NoteViolet"), (130, 84, 60, "NoteViolet"), (200, 52, 130, "Gold"),
                           (350, 84, 80, "NoteViolet"), (450, 116, 110, "NoteViolet")]:
-        panel(ed, x, y_, w, 22, 8, col)
-    panel(ed, 340, 0, 2, 182, 0, "Accent")
-    panel(ed, 332, 0, 18, 10, 3, "Accent")
+        # the golden note is being stretched
+        panel(ed, x, y_, w, 22, 8, col, idle=dict(DW=24, Wave=1, Period=2800) if col == "Gold" else None)
+    # the cursor scrubs along the roll
+    panel(ed, 340, 0, 2, 182, 0, "Accent", idle=dict(DX=-120, Wave=1, Period=4200))
+    panel(ed, 332, 0, 18, 10, 3, "Accent", idle=dict(DX=-120, Wave=1, Period=4200))
 
     # 6 options: sliders and a switch
     op = g()
@@ -248,21 +269,24 @@ def main_previews(b, sx, sy, sw, sh):
         y_ = 30 + i * 52
         panel(op, 0, y_ - 4, 120, 10, 5, "Line2")
         panel(op, 160, y_, sw - 260, 4, 2, "Line")
-        panel(op, 160, y_, int((sw - 260) * v), 4, 2, "Accent")
-        panel(op, 160 + int((sw - 260) * v) - 9, y_ - 7, 18, 18, 9, "Text")
+        # each slider is being adjusted (knob and fill move together)
+        mv = dict(Period=3000 + i * 500, Phase=round(i * 0.3, 2))
+        panel(op, 160, y_, int((sw - 260) * v), 4, 2, "Accent", idle=dict(mv, DW=28))
+        panel(op, 160 + int((sw - 260) * v) - 9, y_ - 7, 18, 18, 9, "Text", idle=dict(mv, DX=28))
     panel(op, sw - 64, 21, 64, 32, 16, "Accent")
-    panel(op, sw - 34, 25, 24, 24, 12, "OnAccent")
+    panel(op, sw - 34, 25, 24, 24, 12, "OnAccent", idle=dict(Scale=0.1, Period=1800))
 
     # 7 about: three voices that meet
     ab = g()
-    for x, col in ((200, "NoteBlue"), (262, "Gold"), (324, "NoteMint")):
-        panel(ab, x, 30, 120, 120, 60, col, alpha=0.75)
-    icon(ab, 296, 66, 48, "note", "OnAccent")
+    for i, (x, col) in enumerate(((200, "NoteBlue"), (262, "Gold"), (324, "NoteMint"))):
+        # the voices come together and part again
+        panel(ab, x, 30, 120, 120, 60, col, alpha=0.75, idle=dict(DX=(1 - i) * 10, Period=3200))
+    icon(ab, 296, 66, 48, "note", "OnAccent", idle=dict(Rot=10, DY=-4, Period=2400))
 
     # 8 exit: goodbye
     ex = g()
     panel(ex, sw // 2 - 70, 20, 140, 140, 70, "Surface3")
-    icon(ex, sw // 2 - 32, 58, 64, "back", "Text2")
+    icon(ex, sw // 2 - 32, 58, 64, "back", "Text2", idle=dict(DX=-10, Period=1600))
 
     for i, grp in enumerate(groups):
         for j, sec in enumerate(grp):
@@ -449,17 +473,39 @@ def song_roulette(b):
 
 
 def song_chessboard(b):
+    """Grid of covers (5 x 4) on the left; on the right a wide card with the
+    selected song: big cover and the details next to it, its features and
+    duet parts below, the scores at the bottom."""
     ini, a = b.ini, b.assets
-    px, py, pw, ph = 872, 96, W - M - 872, 540
-    s = song_common(b, "Chessboard", score_x=px + 24, score_y=py + 450)
-    s.panel(px, py, pw, ph, r=22, color="Surface")
-    cell, pad = 118, 14
-    sel = 180
-    ini.set("SongChessboardCover", od(X=M + 8, Y=104, W=cell, H=cell, Rows=4, Cols=6, Padding=pad,
-                                      SelectX=px + 24, SelectY=py + 24, SelectW=sel, SelectH=sel,
+    cols, rows, cell, pad = 5, 4, 118, 14
+    gx, gy = M + 8, 104
+    px = gx + cols * cell + (cols - 1) * pad + 28
+    py, pw, ph = 96, W - M - px, 540
+    s = song_common(b, "Chessboard", score_x=px + 28, score_y=py + ph - 112)
+    s.panel(px, py, pw, ph, r=24, color="Surface")
+    big = 232
+    ini.set("SongChessboardCover", od(X=gx, Y=gy, W=cell, H=cell, Rows=rows, Cols=cols, Padding=pad,
+                                      SelectX=px + 28, SelectY=py + 28, SelectW=big, SelectH=big,
                                       SelectReflection=0, ZoomThumbW=cell + 22, ZoomThumbH=cell + 22, Reflections=0))
-    song_details(b, "SongChessboard", px + 24, py + 222, pw - 48, align=0, title=26)
-    ini.set("SongChessboardTextNumber", od(X=px + pw - 24, Y=py + 28, Z=0.97, Color="Text3", Font=FONT_MONO,
+    # details next to the cover
+    tx = px + 28 + big + 24
+    tw = px + pw - 28 - tx
+    song_details(b, "SongChessboard", tx, py + 40, tw, align=0, title=26)
+    # features and duet parts below the cover (the whole width)
+    cy = py + 28 + big + 22
+    for name, key, label in CHIPS:
+        sec = ini.get("SongChessboard" + name)
+        sec["X"] = str(px + 28)
+        sec["Y"] = str(cy)
+    for i in (1, 2):
+        st = ini.get("SongChessboardStatic2PlayersDuetSingerP%d" % i)
+        tx_ = ini.get("SongChessboardText2PlayersDuetSingerP%d" % i)
+        off = 0 if i == 1 else 150
+        st["X"], st["Y"] = str(px + 28 + off), str(cy + 50)
+        tx_["X"], tx_["Y"] = str(px + 48 + off), str(cy + 45)
+    # scores at the bottom of the card (shown when the song has some)
+    s.panel(px + 28, py + ph - 136, pw - 56, 1, r=0, color="Divider")
+    ini.set("SongChessboardTextNumber", od(X=px + pw - 28, Y=py + ph - 40, Z=0.97, Color="Text3", Font=FONT_MONO,
                                            Size=14, Align=2))
 
 
@@ -515,7 +561,7 @@ def song_list(b):
 # ---------------------------------------------------------------------------
 LS = 18                    # line spacing (pitch step = LS / 2): tall rows
 LANE_X, LANE_W, LANE_H = 32, W - 64, 9 * LS + 20
-PILL_W, PILL_H = 440, 32   # each player's score pill, just above its staff
+PILL_H = 32                # height of each player's score row, just above its staff
 LANES = (92, 408)          # top of the lane of player 1 and player 2
 LYRICS_Y, LYRICS_H = 596, 104
 
@@ -537,30 +583,31 @@ def sing(b):
         LineColor="ScrimText", LineAlpha=0.18,
         LaneTex=a.panel(LANE_W, LANE_H, 20), LaneLeft=LANE_X, LaneRight=LANE_X + LANE_W,
         LanePadTop=10, LanePadBottom=LANE_H - 9 * LS - 10, LaneColor="Scrim", LaneAlpha=0,
-        HudTex=a.pill(PILL_W, PILL_H), HudW=PILL_W, HudH=PILL_H, HudX=0, HudY=-PILL_H - 2, HudAlpha=0.72))
+        HudW=0, HudAlpha=0))
 
-    # score of each player: a pill just above its staff (drawn with the lane,
-    # SingNoteArea Hud*), so the notes get the whole width. ScoreBG itself is
-    # empty, since the game draws it over the texts. The texts have a dark
-    # outline, so they read over any video.
-    ini.set("SingDefaultScoreBG", od(Tex="ScoreBG", W=PILL_W, H=PILL_H, Type="Colorized"))
-    # line bonus: a badge that pops up to the right of the pill
-    ini.set("SingLineBonus", od(W=150, H=PILL_H - 2, Y=1, Size=16, Font=FONT_INTER, Style=1))
+    # score of each player: one row at the right end, just above its staff,
+    # without any panel: like the notes, the texts carry only a soft shadow
+    # (Shadow) so they read over any video. ScoreBG is empty (W = 0).
+    ini.set("SingDefaultScoreBG", od(Tex="ScoreBG", W=0, H=PILL_H, Type="Colorized"))
+    # line bonus: a badge that pops up at the left end of the same row
+    ini.set("SingLineBonus", od(W=150, H=PILL_H - 4, Y=2, Size=16, Font=FONT_INTER, Style=1))
+
+    R = LANE_X + LANE_W - 8                  # right end of the row
 
     def player(prefix, lane_top, color):
-        x, top = LANE_X, lane_top - PILL_H - 2
-        ini.set("Sing%sStatic" % prefix, od(X=x + 8, Y=top + 6, W=20, H=20, Tex=a.circle(20),
+        top = lane_top - PILL_H
+        ini.set("Sing%sStatic" % prefix, od(X=R - 222, Y=top + 9, W=14, H=14, Tex=a.circle(14),
                                             Color=color, Type="Transparent", Alpha=1))
-        ini.set("Sing%sAvatar" % prefix, od(X=x + 8, Y=top + 6, W=0, H=0, Z=1, Alpha=0))
-        ini.set("Sing%sText" % prefix, od(X=x + 38, Y=top + 5, W=170, H=22, MinSize=13, Text="PLAYERNAME",
-                                          Font=FONT_INTER, Style=OUTLINE, Size=18, Color="ScrimText", Align=0))
-        # no ScoreBG here (W = 0): the pill comes with the lane. X/Y place
-        # the line bonus badge (centred on X, see SingLineBonus)
-        ini.set("Sing%sStatic2" % prefix, od(X=x + PILL_W + 12 + 75, Y=top, W=0, H=PILL_H))
-        ini.set("Sing%sTextScore" % prefix, od(Text="00000", X=x + 226, Y=top + 2, Font=FONT_MONO, Style=OUTLINE,
-                                               Size=24, Color="ScrimText", Align=0))
-        ini.set("Sing%sSingBar" % prefix, od(X=x + 316, Y=top + 12, W=PILL_W - 316 - 14, H=8))
-        ini.set("Sing%sOscilloscope" % prefix, od(X=x + PILL_W + 12, Y=top + 4, W=150, H=24))
+        ini.set("Sing%sAvatar" % prefix, od(X=R - 222, Y=top + 9, W=0, H=0, Z=1, Alpha=0))
+        ini.set("Sing%sText" % prefix, od(X=R - 232, Y=top + 4, W=260, H=22, MinSize=13, Text="PLAYERNAME",
+                                          Font=FONT_INTER, Style=BOLD, Size=18, Color="ScrimText", Align=2,
+                                          Shadow=3))
+        # X/Y place the line bonus badge (centred on X, see SingLineBonus)
+        ini.set("Sing%sStatic2" % prefix, od(X=LANE_X + 24 + 75, Y=top, W=0, H=PILL_H))
+        ini.set("Sing%sTextScore" % prefix, od(Text="00000", X=R - 74, Y=top + 1, Font=FONT_MONO, Style=BOLD,
+                                               Size=24, Color="ScrimText", Align=0, Shadow=3))
+        ini.set("Sing%sSingBar" % prefix, od(X=R - 198, Y=top + 12, W=110, H=8))
+        ini.set("Sing%sOscilloscope" % prefix, od(X=LANE_X + 24 + 162, Y=top + 4, W=150, H=24))
 
     player("P1", LANES[1], "P1Dark")          # one player: lower lane, next to the lyrics
     player("P1TwoP", LANES[0], "P1Dark")
@@ -571,7 +618,7 @@ def sing(b):
         if re.match(r"^Sing\w*Avatar$", name):
             ini.set(name, od(X=0, Y=0, W=0, H=0, Z=1, Alpha=0))
 
-    # 3 or more players (no lanes): a small dark card behind each score
+    # 3 or more players (no lanes): score and name with a soft shadow
     own = ("P1", "P1TwoP", "P2R")
     for name in list(ini.sections):
         m = re.match(r"^Sing(\w+)Static2$", name)
@@ -586,12 +633,14 @@ def sing(b):
         bx, by, bw_, bh_ = (int(bar[k]) for k in ("X", "Y", "W", "H"))
         x0, y0 = min(sx, bx) - 12, sy - 8
         x1, y1 = max(sx + 110, bx + bw_) + 12, by + bh_ + 10
-        ini.set(name, od(Tex="ScoreBG", Type="Colorized", X=x0, Y=y0, W=x1 - x0, H=y1 - y0))
-        ini.set("Sing%sTextScore" % pre, od(Text="00000", X=sx, Y=sy, Font=FONT_MONO, Style=OUTLINE,
-                                             Size=28, Color="ScrimText", Align=0))
+        # no card: the texts carry a soft shadow (the area still centres the
+        # line bonus badge)
+        ini.set(name, od(Tex=a.transparent(), Type="Transparent", X=x0, Y=y0, W=x1 - x0, H=y1 - y0))
+        ini.set("Sing%sTextScore" % pre, od(Text="00000", X=sx, Y=sy, Font=FONT_MONO, Style=BOLD,
+                                             Size=28, Color="ScrimText", Align=0, Shadow=3))
         nm = resolved(ini, "Sing%sText" % pre)
         if nm:
-            nm.update(od(Font=FONT_INTER, Style=OUTLINE, Color="ScrimText"))
+            nm.update(od(Font=FONT_INTER, Style=BOLD, Color="ScrimText", Shadow=3))
             nm["Size"] = str(min(int(nm.get("Size", 20)), 20))
             ini.set("Sing%sText" % pre, nm)
 
@@ -604,7 +653,7 @@ def sing(b):
     for p_ in ("SingLyricsDuetP2UpperBar", "SingLyricsDuetP2LowerBar"):
         ini.set(p_, OrderedDict(ini.get(p_.replace("DuetP2", ""))))
     dy = LANES[0] + LANE_H + 4     # between the first lane and the second pill
-    dh = LANES[1] - PILL_H - 2 - 4 - dy
+    dh = LANES[1] - PILL_H - 4 - dy
     ini.set("SingLyricsBarDuet", od(Tex=a.panel(LANE_W, dh, 22), X=LANE_X, Y=dy, W=LANE_W, H=dh,
                                     Color="Scrim", Type="Transparent"))
     ini.set("SingLyricsDuetP1UpperBar", od(X=96, W=W - 192, Y=dy + 8, H=44, IndicatorYOffset=4))
@@ -1028,14 +1077,20 @@ def loading(b):
     s.static(bx, 452, 0, 4, a.rect(), color="Accent")                    # 1: search (not shown)
     s.static(bx, 452, bw, 4, a.panel(bw, 4, 2), color="Accent")          # 2: reading songs
     s.text(W // 2, 416, "SING_LOADING", size=16, color="Text2", align=1)  # 1: status
-    # mark: three note bars and the pitch line, above the name
-    mx, my = W // 2 - 60, 236
-    for x, y_, w_, col in ((0, 40, 34, "NoteBlue"), (42, 28, 30, "NoteBlue"), (80, 14, 40, "Gold")):
-        s.panel(mx + x, my + y_, w_, 10, r=5, color=col)
-    s.panel(mx + 100, my, 2, 64, r=1, color="Accent")
-    s.panel(mx + 96, my + 10, 10, 10, r=5, color="Accent")
+    # mark: note bars and the pitch line, above the name. The game animates
+    # it ([LoadingMark]): the line runs over the bars, its dot rides on them
+    # and each bar lights up while it is "sung"
+    notes = ((0, 44, 30, "NoteBlue"), (38, 30, 26, "NoteBlue"), (72, 16, 42, "Gold"),
+             (122, 30, 30, "NoteBlue"), (160, 42, 44, "NoteBlue"))
+    mw = 204
+    mx, my = W // 2 - mw // 2, 228
+    for x, y_, w_, col in notes:
+        s.panel(mx + x, my + y_, w_, 10, r=5, color=col)            # statics 2..6
+    s.panel(mx - 16, my, 2, 64, r=1, color="Accent")                 # 7: line
+    s.panel(mx - 20, my + 44, 10, 10, r=5, color="Accent")           # 8: dot
     s.text(W // 2, 316, "UltraStar Core", size=48, font=FONT_DISPLAY, style=BOLD, align=1)
     s.text(W - M, H - 44, "US_VERSION", size=13, color="Text3", align=2)
+    b.ini.set("LoadingMark", od(Notes="2,3,4,5,6", Line=7, Dot=8, Texts="1,0"))
 
 
 def duet_singers(b):

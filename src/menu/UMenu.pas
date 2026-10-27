@@ -922,6 +922,7 @@ function TMenu.AddText(ThemeText: TThemeText): integer;
 begin
   Result := AddText(ThemeText.X, ThemeText.Y, ThemeText.W, ThemeText.H, ThemeText.Font, ThemeText.Style, ThemeText.Size,
     ThemeText.ColR, ThemeText.ColG, ThemeText.ColB, ThemeText.Align, ThemeText.Text, ThemeText.Reflection, ThemeText.ReflectionSpacing, ThemeText.Z, ThemeText.Writable);
+  Text[Result].Shadow := ThemeText.Shadow;
   if (ThemeText.MinSize > 0) then
   begin
     Text[Result].MinSize := ThemeText.MinSize;
@@ -1004,6 +1005,7 @@ begin
   Button[Result].Fade := ThemeButton.Fade;
   Button[Result].SelectScale := ThemeButton.SelectScale;
   Button[Result].DeselectAlpha := ThemeButton.DAlpha;
+  Button[Result].SelectTextDX := ThemeButton.TextDX;
   if (ThemeButton.IconTex <> '') then
     Button[Result].SetIcon(Renderer.GetTexture(Skin.GetTextureFileName(ThemeButton.IconTex), TEXTURE_TYPE_TRANSPARENT),
       ThemeButton.IconX, ThemeButton.IconY, ThemeButton.IconW, ThemeButton.IconH,

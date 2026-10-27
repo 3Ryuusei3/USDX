@@ -100,6 +100,7 @@ type
     TextFont:  byte; // font family of the score text
     TextStyle: byte; // font style of the score text
     TextSize:  integer;    // size of the score text
+    TextShadow: real;      // soft shadow of the score text (px)
 
     PUW:       real;     // width of the line bonus popup
     PUH:       real;     // height of the line bonus popup
@@ -396,6 +397,7 @@ var
     nPosition.TextFont := ScoreText.Font;
     nPosition.TextStyle  := ScoreText.Style;
     nPosition.TextSize   := ScoreText.Size;
+    nPosition.TextShadow := ScoreText.Shadow;
 
     nPosition.RBX := SingBarStatic.X;
     nPosition.RBY := SingBarStatic.Y;
@@ -1109,6 +1111,7 @@ var
     Position.TextFont  := themeElements.Score.Font;
     Position.TextStyle := themeElements.Score.Style;
     Position.TextSize  := themeElements.Score.Size;
+    Position.TextShadow := themeElements.Score.Shadow;
   end;
 begin
   Drawing := false;
@@ -1224,7 +1227,9 @@ begin
     while (Length(ScoreStr) < 5) do
       ScoreStr := '0' + ScoreStr;
 
+    FontShadow := Position.TextShadow;
     PrintText(ScoreStr);
+    FontShadow := 0;
   end; // eo player has position
 end;
 

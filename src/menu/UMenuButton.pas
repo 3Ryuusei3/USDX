@@ -80,6 +80,7 @@ type
     public
       SelectScale:               single;   // > 1: grows around its centre when selected
       DeselectAlpha:             single;   // < 1: fades out while not selected (0 = only the selected one shows)
+      SelectTextDX:              single;   // the texts slide right this far while selected
       Text:                      array of TText;
       TextOffset:                array of TTextOffset;
       Texture:                   TTexture; // Button Screen position and size
@@ -459,6 +460,14 @@ begin
     begin
       E := 1 - (1 - SelProg) * (1 - SelProg) * (1 - SelProg);
       Texture.Alpha := DeselectAlpha + (1 - DeselectAlpha) * E;
+    end;
+
+    // texts slide a little when selected
+    if (SelectTextDX <> 0) and not Fade then
+    begin
+      E := 1 - (1 - SelProg) * (1 - SelProg) * (1 - SelProg);
+      for T := 0 to High(Text) do
+        Text[T].MoveX := SelectTextDX * E;
     end;
 
     // grow when selected
