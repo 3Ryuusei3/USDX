@@ -86,6 +86,15 @@ type
 
       PlayerAvatarButton: array of integer;
 
+      // card layout (theme NameCards)
+      CardsOpened: cardinal;          // for the cards' entrance
+      CardFocusTicks: cardinal;       // last change of the edited player
+      LastPlayerIndex: integer;
+      CardAnimX, CardAnimY, CardAnimW, CardAnimH: real; // ring position (eased)
+      procedure DrawCards;
+      procedure SwitchPlayer(Index: integer);
+      function MicLabel(Player: integer): UTF8String;
+
     public
       Goto_SingScreen: boolean; //If true then next Screen in SingScreen
       
@@ -124,6 +133,7 @@ implementation
 uses
 
   UCommon,
+  UText,
   UGraphic,
   UHelp,
   ULanguage,
@@ -433,19 +443,53 @@ begin
       // functions like this one, called so many times
       SDLK_DOWN:
       begin
-        InteractNext;
+        if Theme.Name.Cards.Enabled then
+        begin
+          // cards: after the difficulty comes the next player's name;
+          // nothing wraps around to the top
+          if (Interaction = 5) then
+          begin
+            if (PlayerIndex < UIni.IPlayersVals[CountIndex] - 1) then
+            begin
+              SwitchPlayer(PlayerIndex + 1);
+              Interaction := 3;
+            end;
+          end
+          else
+            InteractNext;
+        end
+        else
+          InteractNext;
         SetTextInput(Button[PlayerName].Selected);
       end;
 
       SDLK_UP:
       begin
-        InteractPrev;
+        if Theme.Name.Cards.Enabled then
+        begin
+          if (Interaction = 3) and (PlayerIndex > 0) then
+          begin
+            SwitchPlayer(PlayerIndex - 1);
+            Interaction := 5;
+          end
+          else if (Interaction > 0) then
+            InteractPrev;
+        end
+        else
+          InteractPrev;
         SetTextInput(Button[PlayerName].Selected);
       end;
 
       SDLK_RIGHT:
         begin
           AudioPlayback.PlaySound(SoundLib.Change);
+
+          if Theme.Name.Cards.Enabled and (Interaction = 3) then
+          begin
+            if (PlayerIndex < UIni.IPlayersVals[CountIndex] - 1) then
+              SwitchPlayer(PlayerIndex + 1);
+            Exit;
+          end;
 
           if (Interaction in [0, 4, 5]) then
             InteractInc;
@@ -489,6 +533,13 @@ begin
       SDLK_LEFT:
         begin
           AudioPlayback.PlaySound(SoundLib.Change);
+
+          if Theme.Name.Cards.Enabled and (Interaction = 3) then
+          begin
+            if (PlayerIndex > 0) then
+              SwitchPlayer(PlayerIndex - 1);
+            Exit;
+          end;
 
           if (Interaction in [0, 4, 5]) then
             InteractDec;
@@ -578,6 +629,229 @@ begin
 
 end;
 
+procedure TScreenName.SwitchPlayer(Index: integer);
+begin
+  PlayerIndex := Index;
+  RefreshProfile();
+  isScrolling := true;
+  AvatarTarget := PlayerAvatars[PlayerIndex];
+end;
+
+{ "Mic 1" / "Mic 1 · canal 2" for the microphone a player sings into }
+function TScreenName.MicLabel(Player: integer): UTF8String;
+var
+  D, C: integer;
+begin
+  Result := '';
+  for D := 0 to High(Ini.InputDeviceConfig) do
+    for C := 0 to High(Ini.InputDeviceConfig[D].ChannelToPlayerMap) do
+      if (Ini.InputDeviceConfig[D].ChannelToPlayerMap[C] = Player + 1) then
+      begin
+        Result := 'Mic ' + IntToStr(D + 1);
+        if (Length(Ini.InputDeviceConfig[D].ChannelToPlayerMap) > 1) then
+          Result := Result + ' ' + UTF8Encode(WideString(WideChar($00B7))) + ' ' +
+                    Language.Translate('NAME_CARD_CHANNEL') + ' ' + IntToStr(C + 1);
+        Exit;
+      end;
+end;
+
+{ one card per player: colour, name, microphone, colour and difficulty. The
+  edited player's card holds the real name field and colour slide; the
+  difficulty is shown as three segments (the slide itself is hidden) }
+procedure TScreenName.DrawCards;
+const
+  ANIM_MS = 220;
+var
+  Count, Rows, I, Col, Row, S: integer;
+  CW, CH, CX, CY, SegW, T, E, X, Y, W, H: real;
+  Tex: TTexture;
+  Ring, Circle, Card, Seg, Track: TTexture;
+  R, G, B: real;
+  PCol: TRGB;
+  Name, Initial, Lbl: UTF8String;
+  CirS, CirX, CirY, TxX, LblY, NameY, ColY: real;
+  NameSize: integer;
+  Now: cardinal;
+
+  procedure Pal(const ColorName: string; out PR, PG, PB: real);
+  begin
+    PR := 1; PG := 1; PB := 1;
+    LoadColor(PR, PG, PB, ColorName);
+  end;
+
+  procedure Put(Tex: TTexture; PX, PY, PW, PH, PR, PG, PB, PA: real);
+  begin
+    if (Tex = nil) then
+      Exit;
+    Tex.X := PX; Tex.Y := PY; Tex.W := PW; Tex.H := PH; Tex.Z := 0.5;
+    Tex.ColR := PR; Tex.ColG := PG; Tex.ColB := PB; Tex.Alpha := PA;
+    Tex.TexX1 := 0; Tex.TexY1 := 0; Tex.TexX2 := 1; Tex.TexY2 := 1;
+    Renderer.DrawTexture(Tex);
+  end;
+
+  procedure Txt(const S: UTF8String; PX, PY: real; Size: integer; Font, Style: integer; const ColorName: string;
+                PA: real; Align: integer = 0);
+  var
+    TR, TG, TB, TW: real;
+  begin
+    Pal(ColorName, TR, TG, TB);
+    SetFontFamily(Font);
+    SetFontStyle(Style);
+    SetFontItalic(false);
+    SetFontSize(Size);
+    SetFontReflection(false, 0);
+    TW := TextWidth(S);
+    if (Align = 1) then
+      PX := PX - TW / 2;
+    SetFontPos(PX, PY);
+    SetFontColor(TR, TG, TB, PA);
+    PrintText(S);
+  end;
+
+begin
+  with Theme.Name.Cards do
+  begin
+    Card := Renderer.GetTexture(Skin.GetTextureFileName(CardTex), TEXTURE_TYPE_TRANSPARENT);
+    Ring := Renderer.GetTexture(Skin.GetTextureFileName(RingTex), TEXTURE_TYPE_TRANSPARENT);
+    Circle := Renderer.GetTexture(Skin.GetTextureFileName(CircleTex), TEXTURE_TYPE_TRANSPARENT);
+    Seg := Renderer.GetTexture(Skin.GetTextureFileName(SegTex), TEXTURE_TYPE_TRANSPARENT);
+    Track := Renderer.GetTexture(Skin.GetTextureFileName(TrackTex), TEXTURE_TYPE_TRANSPARENT);
+
+    Now := SDL_GetTicks();
+    if (CardsOpened = 0) then
+      CardsOpened := Now;
+
+    Count := UIni.IPlayersVals[CountIndex];
+    Rows := (Count + Cols - 1) div Cols;
+    CW := (W - Gap * (Cols - 1)) / Cols;
+    CH := (H - Gap * (Rows - 1)) / Rows;
+    if (CH > MaxH) then
+      CH := MaxH;
+
+    for I := 0 to Count - 1 do
+    begin
+      Col := I mod Cols;
+      Row := I div Cols;
+      CX := X + Col * (CW + Gap);
+      CY := Y + Row * (CH + Gap);
+
+      // entrance: the cards rise in one after the other
+      T := (Now - CardsOpened - I * 45) / ANIM_MS;
+      if (T < 0) then T := 0 else if (T > 1) then T := 1;
+      E := 1 - (1 - T) * (1 - T) * (1 - T);
+      CY := CY + (1 - E) * 18;
+
+      if (I = PlayerIndex) then
+        Pal('Surface2', R, G, B)
+      else
+        Pal('Surface', R, G, B);
+      Put(Card, CX, CY, CW, CH, R, G, B, E);
+
+      PCol := GetPlayerColor(Num[I]);
+      if (I = PlayerIndex) then
+      begin
+        // the edited card: ring follows it smoothly
+        if (LastPlayerIndex <> PlayerIndex) or (CardAnimW = 0) then
+        begin
+          if (CardAnimW = 0) then
+          begin
+            CardAnimX := CX; CardAnimY := CY; CardAnimW := CW; CardAnimH := CH;
+          end;
+          LastPlayerIndex := PlayerIndex;
+          CardFocusTicks := Now;
+        end;
+        T := (Now - CardFocusTicks) / ANIM_MS;
+        if (T > 1) then T := 1;
+        CardAnimX := CardAnimX + (CX - CardAnimX) * T;
+        CardAnimY := CardAnimY + (CY - CardAnimY) * T;
+        CardAnimW := CardAnimW + (CW - CardAnimW) * T;
+        CardAnimH := CardAnimH + (CH - CardAnimH) * T;
+      end;
+
+      // compact cards (two rows of players) put everything closer
+      if (CH < 230) then
+      begin
+        CirS := 44; CirX := 20; CirY := 18; TxX := 76; LblY := 18; NameY := 32; NameSize := 20;
+        ColY := 74;
+      end
+      else
+      begin
+        CirS := 56; CirX := 24; CirY := 24; TxX := 96; LblY := 26; NameY := 46; NameSize := 24;
+        ColY := CH - 112;
+      end;
+
+      // colour circle with the initial
+      Put(Circle, CX + CirX, CY + CirY, CirS, CirS, PCol.R, PCol.G, PCol.B, E);
+      if (I = PlayerIndex) then
+        Name := Button[PlayerName].Text[0].Text
+      else
+        Name := PlayerNames[I];
+      Initial := UTF8UpperCase(UTF8Copy(Trim(Name), 1, 1));
+      Txt(Initial, CX + CirX + CirS / 2, CY + CirY + CirS / 2 - CirS * 0.24, Round(CirS * 0.46), TitleFont, 1,
+          'OnAccent', E, 1);
+
+      Lbl := UTF8UpperCase(Language.Translate('NAME_CARD_PLAYER')) + ' ' + IntToStr(I + 1);
+      if (MicLabel(I) <> '') then
+        Lbl := Lbl + '  ' + UTF8Encode(WideString(WideChar($00B7))) + '  ' + MicLabel(I);
+      Txt(Lbl, CX + TxX, CY + LblY, 12, Font, 1, 'Text3', E);
+      if (I <> PlayerIndex) then
+        Txt(Name, CX + TxX, CY + NameY, NameSize, TitleFont, 0, 'Text', E);
+
+      // colour (the edited card has the slide there)
+      if (I <> PlayerIndex) then
+      begin
+        Txt('Color', CX + 24, CY + ColY + 12, 15, Font, 0, 'Text3', E);
+        Put(Circle, CX + 114, CY + ColY + 14, 14, 14, PCol.R, PCol.G, PCol.B, E);
+        Txt(IPlayerColorTranslated[Num[I] - 1], CX + 136, CY + ColY + 12, 15, Font, 0, 'Text2', E);
+      end;
+
+      // difficulty as three segments
+      SegW := (CW - 48 - 8) / 3;
+      Pal('Bg', R, G, B);
+      Put(Track, CX + 20, CY + CH - 60, CW - 40, 44, R, G, B, E * 0.9);
+      for S := 0 to 2 do
+      begin
+        if (PlayerLevel[I] = S) then
+        begin
+          if (I = PlayerIndex) and (Interaction = 5) then
+            Put(Seg, CX + 24 + S * (SegW + 4), CY + CH - 56, SegW, 36, PCol.R, PCol.G, PCol.B, E)
+          else
+          begin
+            Pal('Line', R, G, B);
+            Put(Seg, CX + 24 + S * (SegW + 4), CY + CH - 56, SegW, 36, R, G, B, E);
+          end;
+        end;
+        if (PlayerLevel[I] = S) and (I = PlayerIndex) and (Interaction = 5) then
+          Txt(IDifficultyTranslated[S], CX + 24 + S * (SegW + 4) + SegW / 2, CY + CH - 47, 15, Font, 1, 'OnAccent', E, 1)
+        else if (PlayerLevel[I] = S) then
+          Txt(IDifficultyTranslated[S], CX + 24 + S * (SegW + 4) + SegW / 2, CY + CH - 47, 15, Font, 1, 'Text', E, 1)
+        else
+          Txt(IDifficultyTranslated[S], CX + 24 + S * (SegW + 4) + SegW / 2, CY + CH - 47, 15, Font, 0, 'Text3', E, 1);
+      end;
+
+      // the real widgets of the edited player go into his card
+      if (I = PlayerIndex) then
+      begin
+        Button[PlayerName].X := CX + TxX - 8;
+        Button[PlayerName].Y := CY + NameY - 12;
+        SelectsS[PlayerColor].SetX(CX + 20);
+        SelectsS[PlayerColor].SetY(CY + ColY);
+      end;
+    end;
+
+    // ring around the edited card: accent while choosing the player
+    if (Interaction = 1) then
+      Pal('Accent', R, G, B)
+    else
+      Pal('Line2', R, G, B);
+    Put(Ring, CardAnimX - 3, CardAnimY - 3, CardAnimW + 6, CardAnimH + 6, R, G, B, 1);
+
+    // hidden widgets (still used for the keys)
+    Button[PlayerSelect].X := -4000;
+    SelectsS[PlayerSelectLevel].SetX(-4000);
+  end;
+end;
+
 procedure TScreenName.ChangeSelectPlayerPosition(Player: integer);
 begin
   Button[PlayerSelect].X := Theme.Name.PlayerSelect[Player].X + Theme.Name.PlayerSelectCurrent.X;
@@ -613,7 +887,7 @@ begin
   begin
     Statics[PlayerCurrent[I]].Visible := I < Count;
     Text[PlayerCurrentText[I]].Visible := I < Count;
-    Statics[PlayerCurrentAvatar[I]].Visible := I < Count;
+    Statics[PlayerCurrentAvatar[I]].Visible := (I < Count) and Theme.Name.PlayerScrollAvatar.Show;
   end;
 
   // list players
@@ -808,6 +1082,12 @@ begin
 
   PlayerAvatar := AddButton(Theme.Name.PlayerButtonAvatar);
   PlayerAvatarIID := High(Interactions);
+  if not Theme.Name.PlayerScrollAvatar.Show then
+  begin
+    // theme without avatar pictures: the players only have their colour
+    Button[PlayerAvatar].Visible := false;
+    Button[PlayerAvatar].Selectable := false;
+  end;
 
   PlayerName := AddButton(Theme.Name.PlayerButtonName);
   Button[PlayerName].Text[0].Writable := true;
@@ -868,6 +1148,10 @@ var
 begin
   inherited;
 
+  // cards come in again
+  CardsOpened := 0;
+  CardAnimW := 0;
+
   Ini.ReloadNames;
   CountIndex := Ini.Players;
 
@@ -920,6 +1204,14 @@ var
   X:        real;
   Factor:   real;
 begin
+  if not Theme.Name.PlayerScrollAvatar.Show then
+  begin
+    for B := 0 to High(PlayerAvatarButton) do
+      if (PlayerAvatarButton[B] > 0) then // 0: slot of an avatar that could not be loaded
+        Button[PlayerAvatarButton[B]].Visible := false;
+    Exit;
+  end;
+
 
   VS := Length(AvatarsList);
 
@@ -968,7 +1260,8 @@ begin
         Button[B].Y := (Theme.Name.PlayerAvatar.Y  + (Theme.Name.PlayerAvatar.H - Abs(Theme.Name.PlayerAvatar.H * cos(Angle))) * 0.5);
         Button[B].Z := 0.95 - Abs(Pos) * 0.01;
 
-        Button[B].Reflection := true;
+        // flat themes can turn the mirror effect off
+        Button[B].Reflection := Theme.Name.PlayerScrollAvatar.Reflection;
         Button[B].Reflectionspacing := 2;
 
         if (B <> PlayerAvatarButton[PlayerAvatars[PlayerIndex]]) then
@@ -1092,6 +1385,9 @@ begin
 
   // set current name = name in list
   Text[PlayerCurrentText[PlayerIndex]].Text := Button[PlayerName].Text[0].Text;
+
+  if Theme.Name.Cards.Enabled then
+    DrawCards;
 
   //Instead of Draw FG Procedure:
   //We draw Buttons for our own

@@ -56,6 +56,7 @@ type
     Color:  TRGB;
     Tex:    string;
     Alpha:  real;
+    Motion: real;   // Texture: the image drifts slowly (0: still)
   end;
 
 const
@@ -138,6 +139,18 @@ type
     //Reflection
     Reflection:           boolean;
     Reflectionspacing:    real;
+    // idle motion (used by screens that animate their statics, e.g. the
+    // main menu previews): offsets and growth (DH grows upwards), extra
+    // scale, rotation (degrees), alpha dip; Period in ms, Phase 0..1,
+    // Wave 0 = sine, 1 = smooth back and forth between 0 and 1
+    IdleDX, IdleDY, IdleDW, IdleDH, IdleScale, IdleRot, IdleAlpha: real;
+    IdlePeriod, IdlePhase: real;
+    IdleWave: integer;
+    // Wave 2: 0 until IdleStart, rises evenly to 1 over IdleDur, stays (all
+    // fractions of the period); IdleFade > 0: fades out from that fraction
+    // on; IdleCrop: the texture is cut, not squeezed, as the width grows
+    IdleStart, IdleDur, IdleFade: real;
+    IdleCrop: boolean;
   end;
   AThemeStatic = array of TThemeStatic;
 
@@ -161,6 +174,8 @@ type
     Align:    integer;
     Text:     UTF8String;
     Writable: boolean; // true -> add a blink char (|) at the end
+    MinSize:  integer; // smallest size before a long text is cut (0: none)
+    Shadow:   real;    // soft dark shadow of about this many pixels (0: none)
     //Reflection
     Reflection:           boolean;
     ReflectionSpacing:    real;
@@ -195,6 +210,17 @@ type
     //Fade Mod
     SelectH:    integer;
     SelectW:    integer;
+    SelectScale: real;   // the selected button grows a little (animated)
+    DAlpha:     real;    // opacity of the button while not selected
+    // an icon on the button (relative position) that comes alive when selected
+    IconTex:    string;
+    IconX, IconY, IconW, IconH: integer;
+    IconColR, IconColG, IconColB: real;      // selected
+    IconDColR, IconDColG, IconDColB: real;   // not selected
+    IconScale:  real;    // size when selected
+    IconSpin:   real;    // degrees turned (eased) when it gets selected
+    IconWobble: real;    // degrees of a short swing when it gets selected
+    TextDX:     real;    // the texts slide this far right while selected
     Fade:       boolean;
     FadeText:   boolean;
     DeSelectReflectionspacing : real;
@@ -243,6 +269,11 @@ type
     SBGDColR, SBGDColG, SBGDColB, SBGDInt:    real;
     STColR,  STColG,  STColB,  STInt:     real;
     STDColR, STDColG, STDColB, STDInt:    real;
+    STUColR, STUColG, STUColB:            real;
+    DAlpha:                               real;   // label box opacity while not selected
+    UseSTUColor:                          boolean;
+    Font, Style:                          integer; // of the label and the values (default 0, regular)
+    ArrowTint:                            boolean; // the arrows take the colour of the value text
     SkipX:    integer;
   end;
 
@@ -290,9 +321,17 @@ type
     Oscilloscope: TThemePosition;
   end;
 
+  TIntList = array of integer;
+
   TThemeLoading = class(TThemeBasic)
     StaticAnimation:  TThemeStatic;
     TextLoading:      TThemeText;
+    // animated mark ([LoadingMark]): statics of the note bars, the pitch
+    // line and its dot (indices among the screen's statics, -1: none) and
+    // the texts that fade in (title etc.)
+    MarkNotes:        TIntList;
+    MarkLine, MarkDot: integer;
+    MarkTexts:        TIntList;
   end;
 
   TThemeMain = class(TThemeBasic)
@@ -309,6 +348,9 @@ type
     TextDescriptionLong:  TThemeText;
     Description:          array[0..7] of UTF8String;
     DescriptionLong:      array[0..7] of UTF8String;
+    // picture of each entry, shown next to the menu while it is selected
+    // (MainPreview1Static1.., one group per entry)
+    Preview:              array[0..7] of AThemeStatic;
   end;
 
   TThemeName = class(TThemeBasic)
@@ -318,6 +360,19 @@ type
     PlayerScrollAvatar: record
       NumAvatars: integer;
       DistanceAvatars: integer;
+      Reflection: boolean; // mirror effect under the avatars of the carousel
+      Show: boolean;       // false: no avatar pictures, players only by colour
+    end;
+
+    // optional layout with one card per player ([NameCards] Enabled=1):
+    // the cards are drawn by the screen, the name field and the colour slide
+    // of the player being edited are placed inside his card
+    Cards: record
+      Enabled: boolean;
+      X, Y, W, H: integer;        // area of the cards
+      Cols, Gap, MaxH: integer;
+      CardTex, RingTex, CircleTex, SegTex, TrackTex: string;
+      Font, TitleFont: integer;
     end;
 
     PlayerAvatar:        TThemeButton;
@@ -358,6 +413,21 @@ type
     //Rap Icons
     RapIcon:          TThemeStatic;
     RapToFreestyleIcon: TThemeStatic;
+
+    // list mode: details of the selected song (title, artist, year, icons);
+    // the other modes use TextTitle etc. for that
+    HasDetail:        boolean;
+    TextInfo:         TThemeText;   // genre, language, edition of the song
+    DetailTitle, DetailArtist, DetailYear: TThemeText;
+    DetailVideoIcon, DetailMedleyIcon, DetailCalculatedMedleyIcon,
+    DetailDuetIcon, DetailRapIcon, DetailRapToFreestyleIcon: TThemeStatic;
+    // icons of the selected song placed one after the other (only the shown
+    // ones): 0 off, 1 from VideoIcon.X to the right, 2 centred on it
+    IconFlow:         integer;
+    IconGap:          integer;
+    // covers cut to a square with rounded corners (fraction of the side)
+    CoverSquare:      boolean;
+    CoverRadius:      real;
 
     //Show Cat in TopLeft Mod
     TextCat:          TThemeText;
@@ -531,6 +601,43 @@ type
 
     InfoMessageText: TThemeText;
     InfoMessageBG:   TThemeStatic;
+
+    // Geometry of the note lanes. The "Top" values are historically named:
+    // they are the baseline the notes are drawn upwards from.
+    NoteArea: record
+      Left, Right: integer;
+      LineSpacing, LineSpacing3: integer;   // 1-2 rows, 3 rows
+      Top1Row: integer;
+      Top2Rows1, Top2Rows2: integer;
+      Top3Rows1, Top3Rows2, Top3Rows3: integer;
+      NoteScale: real;                      // size of the notes
+      NoteCapScale: real;                   // width of the rounded note ends
+      LineAlpha: real;                      // note guide lines
+      LineColR, LineColG, LineColB: real;
+      Left3, Right3: integer;               // lanes with 3 or more players
+      // optional background of each lane in use (texture tinted by a colour)
+      LaneTex: string;
+      LaneLeft, LaneRight: integer;
+      LanePadTop, LanePadBottom: integer;
+      LaneColR, LaneColG, LaneColB, LaneAlpha: real;
+      // optional score card at the left end of each lane (same colour)
+      HudTex: string;
+      HudW: integer;
+      HudX, HudY, HudH: integer;            // offset from the lane's corner; height (0: the lane's)
+      NameBoxPad: integer;                  // > 0: the player static becomes a box around the name
+      HudAlpha: real;
+      LanePad3: integer;                    // side room of the 3-row veils
+      MissScale: real;                      // height of sung notes that miss the tone
+    end;
+
+    // optional geometry of the line bonus popup, relative to the score
+    // background. H = 0 keeps the classic popup (same size as the score bg)
+    LineBonus: record
+      W, H: integer;          // W = 0: width of the score background
+      Y: integer;             // top, relative to the score background top
+      Size: integer;          // font size
+      Font, Style: integer;
+    end;
   end;
 
   TThemeJukebox = class(TThemeBasic)
@@ -1120,6 +1227,9 @@ type
     Filename: IPath;
     DefaultSkin: integer;
     Creator: string;
+    RenderW: integer; // virtual canvas the theme is laid out on
+    KeepAspect: boolean; // draw with bars instead of stretching the canvas
+    RenderH: integer;
   end;
 
   TThemeSection = record
@@ -1240,10 +1350,12 @@ type
     procedure ThemeLoadEqualizer(var ThemeEqualizer: TThemeEqualizer; const Name: string);
     procedure ThemeLoadPosition(var ThemePosition: TThemePosition; const Name: string);
     procedure ThemeLoadLyricBar(var LyricBar: TThemeLyricBar; const Name: string);
+    procedure ThemeLoadSingNoteArea;
 
     procedure ThemeScoreLoad;
     procedure ThemePartyLoad;
     procedure ThemeSongLoad;
+    procedure ThemeLoadLoadingMark;
     procedure ThemeSongReload;
   end;
 
@@ -1393,6 +1505,9 @@ begin
   Entry.BaseTheme := Ini.ReadString('Theme', 'BaseTheme', '');
   ThemeVersion := Trim(UpperCase(Ini.ReadString('Theme', 'US_Version', 'no version tag')));
   Entry.Creator := Ini.ReadString('Theme', 'Creator', 'Unknown');
+  Entry.RenderW := Ini.ReadInteger('Theme', 'RenderWidth', 800);
+  Entry.RenderH := Ini.ReadInteger('Theme', 'RenderHeight', 600);
+  Entry.KeepAspect := Ini.ReadBool('Theme', 'KeepAspect', false);
   SkinName := Ini.ReadString('Theme', 'DefaultSkin', FileName.SetExtension('').ToNative);
 
   Ini.Free;
@@ -1489,6 +1604,8 @@ begin
   if Themes[ThemeNum].FileName.IsFile() then
   begin
     Result := true;
+    // the theme decides the size of the virtual canvas (4:3 or widescreen)
+    SetRenderSize(Themes[ThemeNum].RenderW, Themes[ThemeNum].RenderH, Themes[ThemeNum].KeepAspect);
     OpenFile(ThemeNum);
     if ThemeIni.ReadString('Theme', 'Name', '') <> '' then
     begin
@@ -1509,6 +1626,7 @@ begin
       ThemeLoadBasic(Loading, 'Loading');
       ThemeLoadText(Loading.TextLoading, 'LoadingTextLoading');
       ThemeLoadOptionalStatic(Loading.StaticAnimation, 'LoadingStaticAnimation');
+      ThemeLoadLoadingMark;
 
       // Main
       ThemeLoadBasic(Main, 'Main');
@@ -1523,6 +1641,8 @@ begin
       ThemeLoadButton(Main.ButtonOptions, 'MainButtonOptions');
       ThemeLoadButton(Main.ButtonAbout, 'MainButtonAbout');
       ThemeLoadButton(Main.ButtonExit, 'MainButtonExit');
+      for I := 0 to 7 do
+        ThemeLoadStatics(Main.Preview[I], 'MainPreview' + IntToStr(I + 1) + 'Static');
 
       //Main Desc Text Translation Start
 
@@ -1557,6 +1677,27 @@ begin
       IniFile := ResolveThemeFile('NamePlayerScrollAvatar');
       Name.PlayerScrollAvatar.NumAvatars := IniFile.ReadInteger('NamePlayerScrollAvatar', 'Count', 5);
       Name.PlayerScrollAvatar.DistanceAvatars := IniFile.ReadInteger('NamePlayerScrollAvatar', 'Distance', 40);
+      Name.PlayerScrollAvatar.Reflection := IniFile.ReadBool('NamePlayerScrollAvatar', 'Reflection', true);
+      Name.PlayerScrollAvatar.Show := IniFile.ReadBool('NamePlayerScrollAvatar', 'Show', true);
+      IniFile := ResolveThemeFile('NameCards');
+      with Name.Cards do
+      begin
+        Enabled := IniFile.ReadBool('NameCards', 'Enabled', false);
+        X := IniFile.ReadInteger('NameCards', 'X', 48);
+        Y := IniFile.ReadInteger('NameCards', 'Y', 200);
+        W := IniFile.ReadInteger('NameCards', 'W', 1184);
+        H := IniFile.ReadInteger('NameCards', 'H', 400);
+        Cols := IniFile.ReadInteger('NameCards', 'Cols', 3);
+        Gap := IniFile.ReadInteger('NameCards', 'Gap', 20);
+        MaxH := IniFile.ReadInteger('NameCards', 'MaxH', 260);
+        CardTex := IniFile.ReadString('NameCards', 'CardTex', '');
+        RingTex := IniFile.ReadString('NameCards', 'RingTex', '');
+        CircleTex := IniFile.ReadString('NameCards', 'CircleTex', '');
+        SegTex := IniFile.ReadString('NameCards', 'SegTex', '');
+        TrackTex := IniFile.ReadString('NameCards', 'TrackTex', SegTex);
+        Font := IniFile.ReadInteger('NameCards', 'Font', 0);
+        TitleFont := IniFile.ReadInteger('NameCards', 'TitleFont', 0);
+      end;
 
       ThemeLoadButton(Name.PlayerAvatar, 'NamePlayerAvatar');
 
@@ -1697,6 +1838,8 @@ begin
 
       ThemeLoadText (Sing.InfoMessageText, 'SingInfoMessageText');
       ThemeLoadStatic (Sing.InfoMessageBG, 'SingInfoMessageBG');
+
+      ThemeLoadSingNoteArea;
 
       ThemeLoadSingPlayerStatics(Sing.Solo1PP1, 'P1');
 
@@ -2292,6 +2435,71 @@ begin
   Result := DefaultValue;
 end;
 
+{**
+ * Note lanes of the sing screen. Without a [SingNoteArea] section the classic
+ * 800x600 layout is used, scaled to the theme's canvas.
+ *}
+procedure TTheme.ThemeLoadSingNoteArea;
+var
+  SectionList: TThemeSectionList;
+  SX, SY: real;
+begin
+  SectionList := GetSectionList('SingNoteArea');
+  SX := RenderW / 800;
+  SY := RenderH / 600;
+  with Sing.NoteArea do
+  begin
+    Left         := ReadInteger(SectionList, 'Left', Round(20 * SX));
+    Right        := ReadInteger(SectionList, 'Right', RenderW - Round(20 * SX));
+    LineSpacing  := ReadInteger(SectionList, 'LineSpacing', Round(15 * SY));
+    LineSpacing3 := ReadInteger(SectionList, 'LineSpacing3', Round(12 * SY));
+    Top1Row      := ReadInteger(SectionList, 'Top1Row', Round(430 * SY));
+    Top2Rows1    := ReadInteger(SectionList, 'Top2Rows1', Round(250 * SY));
+    Top2Rows2    := ReadInteger(SectionList, 'Top2Rows2', Round(430 * SY));
+    Top3Rows1    := ReadInteger(SectionList, 'Top3Rows1', Round(215 * SY));
+    Top3Rows2    := ReadInteger(SectionList, 'Top3Rows2', Round(340 * SY));
+    Top3Rows3    := ReadInteger(SectionList, 'Top3Rows3', Round(465 * SY));
+    NoteScale    := ReadFloat(SectionList, 'NoteScale', 1);
+    NoteCapScale := ReadFloat(SectionList, 'NoteCapScale', 1);
+    LineAlpha    := ReadFloat(SectionList, 'LineAlpha', 0.4);
+    LineColR     := 0.5;
+    LineColG     := 0.5;
+    LineColB     := 0.5;
+    LoadColor(LineColR, LineColG, LineColB, ReadString(SectionList, 'LineColor', ''));
+    Left3        := ReadInteger(SectionList, 'Left3', Round(20 * SX));
+    Right3       := ReadInteger(SectionList, 'Right3', RenderW - Round(20 * SX));
+    LaneTex      := ReadString(SectionList, 'LaneTex', '');
+    LaneLeft     := ReadInteger(SectionList, 'LaneLeft', Left);
+    LaneRight    := ReadInteger(SectionList, 'LaneRight', Right);
+    LanePadTop   := ReadInteger(SectionList, 'LanePadTop', 10);
+    LanePadBottom := ReadInteger(SectionList, 'LanePadBottom', 10);
+    LaneAlpha    := ReadFloat(SectionList, 'LaneAlpha', 0);
+    LaneColR     := 0;
+    LaneColG     := 0;
+    LaneColB     := 0;
+    LoadColor(LaneColR, LaneColG, LaneColB, ReadString(SectionList, 'LaneColor', ''));
+    HudTex       := ReadString(SectionList, 'HudTex', '');
+    HudW         := ReadInteger(SectionList, 'HudW', 0);
+    HudX         := ReadInteger(SectionList, 'HudX', 0);
+    HudY         := ReadInteger(SectionList, 'HudY', 0);
+    HudH         := ReadInteger(SectionList, 'HudH', 0);
+    NameBoxPad   := ReadInteger(SectionList, 'NameBoxPad', 0);
+    HudAlpha     := ReadFloat(SectionList, 'HudAlpha', 0);
+    LanePad3     := ReadInteger(SectionList, 'LanePad3', 16);
+    MissScale    := ReadFloat(SectionList, 'MissScale', 0.65);
+  end;
+  SectionList := GetSectionList('SingLineBonus');
+  with Sing.LineBonus do
+  begin
+    W     := ReadInteger(SectionList, 'W', 0);
+    H     := ReadInteger(SectionList, 'H', 0);
+    Y     := ReadInteger(SectionList, 'Y', 0);
+    Size  := ReadInteger(SectionList, 'Size', 18);
+    Font  := ReadInteger(SectionList, 'Font', 0);
+    Style := ReadInteger(SectionList, 'Style', 2);
+  end;
+end;
+
 procedure TTheme.ThemeLoadBasic(Theme: TThemeBasic; const Name: string);
 begin
   ThemeLoadBackground(Theme.Background, Name);
@@ -2351,6 +2559,7 @@ begin
   ThemeBackground.Color.G := ReadFloat(SectionList, 'ColG', 1);
   ThemeBackground.Color.B := ReadFloat(SectionList, 'ColB', 1);
   ThemeBackground.Alpha   := ReadFloat(SectionList, 'Alpha', 1);
+  ThemeBackground.Motion  := ReadFloat(SectionList, 'Motion', 0);
 end;
 
 procedure TTheme.ThemeLoadHighScoreList(var List: TThemeHighScoreList; const Name: string);
@@ -2403,6 +2612,8 @@ begin
   ThemeText.Style := ReadInteger(SectionList, 'Style', ftRegular);
   ThemeText.Size  := ReadInteger(SectionList, 'Size', 0);
   ThemeText.Align := ReadInteger(SectionList, 'Align', 0);
+  ThemeText.MinSize := ReadInteger(SectionList, 'MinSize', 0);
+  ThemeText.Shadow := ReadFloat(SectionList, 'Shadow', 0);
 
   ThemeText.Text  := Language.Translate(ReadString(SectionList, 'Text', ''));
   ThemeText.Color := ReadString(SectionList, 'Color', '');
@@ -2481,6 +2692,20 @@ begin
   ThemeStatic.TexY2 := ReadFloat(SectionList, 'TexY2', 1);
   ThemeStatic.Reflection         := ReadBool(SectionList, 'Reflection', false);
   ThemeStatic.Reflectionspacing  := ReadFloat(SectionList, 'ReflectionSpacing', 15);
+  ThemeStatic.IdleDX     := ReadFloat(SectionList, 'IdleDX', 0);
+  ThemeStatic.IdleDY     := ReadFloat(SectionList, 'IdleDY', 0);
+  ThemeStatic.IdleDW     := ReadFloat(SectionList, 'IdleDW', 0);
+  ThemeStatic.IdleDH     := ReadFloat(SectionList, 'IdleDH', 0);
+  ThemeStatic.IdleScale  := ReadFloat(SectionList, 'IdleScale', 0);
+  ThemeStatic.IdleRot    := ReadFloat(SectionList, 'IdleRot', 0);
+  ThemeStatic.IdleAlpha  := ReadFloat(SectionList, 'IdleAlpha', 0);
+  ThemeStatic.IdlePeriod := ReadFloat(SectionList, 'IdlePeriod', 3000);
+  ThemeStatic.IdlePhase  := ReadFloat(SectionList, 'IdlePhase', 0);
+  ThemeStatic.IdleWave   := ReadInteger(SectionList, 'IdleWave', 0);
+  ThemeStatic.IdleStart  := ReadFloat(SectionList, 'IdleStart', 0);
+  ThemeStatic.IdleDur    := ReadFloat(SectionList, 'IdleDur', 1);
+  ThemeStatic.IdleFade   := ReadFloat(SectionList, 'IdleFade', 0);
+  ThemeStatic.IdleCrop   := ReadBool(SectionList, 'IdleCrop', false);
   C := ColorExists(ThemeStatic.Color);
   if C >= 0 then
   begin
@@ -2662,6 +2887,23 @@ begin
   ThemeButton.DeSelectReflectionspacing := ReadFloat(SectionList, 'DeSelectReflectionSpacing', ThemeButton.Reflectionspacing);
 
   ThemeButton.Fade := ReadBool(SectionList, 'Fade', false);
+  ThemeButton.SelectScale := ReadFloat(SectionList, 'SelectScale', 1);
+  ThemeButton.DAlpha := ReadFloat(SectionList, 'DAlpha', 1);
+  ThemeButton.IconTex := ReadString(SectionList, 'IconTex', '');
+  ThemeButton.IconX := ReadInteger(SectionList, 'IconX', 0);
+  ThemeButton.IconY := ReadInteger(SectionList, 'IconY', 0);
+  ThemeButton.IconW := ReadInteger(SectionList, 'IconW', 24);
+  ThemeButton.IconH := ReadInteger(SectionList, 'IconH', ThemeButton.IconW);
+  ThemeButton.IconColR := 1; ThemeButton.IconColG := 1; ThemeButton.IconColB := 1;
+  LoadColor(ThemeButton.IconColR, ThemeButton.IconColG, ThemeButton.IconColB, ReadString(SectionList, 'IconColor', ''));
+  ThemeButton.IconDColR := ThemeButton.IconColR;
+  ThemeButton.IconDColG := ThemeButton.IconColG;
+  ThemeButton.IconDColB := ThemeButton.IconColB;
+  LoadColor(ThemeButton.IconDColR, ThemeButton.IconDColG, ThemeButton.IconDColB, ReadString(SectionList, 'IconDColor', ''));
+  ThemeButton.IconScale := ReadFloat(SectionList, 'IconScale', 1);
+  ThemeButton.IconSpin := ReadFloat(SectionList, 'IconSpin', 0);
+  ThemeButton.IconWobble := ReadFloat(SectionList, 'IconWobble', 0);
+  ThemeButton.TextDX := ReadFloat(SectionList, 'TextDX', 0);
   ThemeButton.FadeText := ReadBool(SectionList, 'FadeText', false);
 
 
@@ -2770,6 +3012,13 @@ begin
   LoadColor(ThemeSelectS.STDColR, ThemeSelectS.STDColG,  ThemeSelectS.STDColB, ReadString(SectionList, 'STDColor', ''));
   ThemeSelectS.STDInt :=  ReadFloat(SectionList, 'STDInt', 1);
 
+  ThemeSelectS.UseSTUColor := ColorExists(ReadString(SectionList, 'STUColor', '')) >= 0;
+  ThemeSelectS.DAlpha := ReadFloat(SectionList, 'DAlpha', 1);
+  ThemeSelectS.Font := ReadInteger(SectionList, 'Font', 0);
+  ThemeSelectS.Style := ReadInteger(SectionList, 'Style', 0);
+  ThemeSelectS.ArrowTint := ReadBool(SectionList, 'ArrowTint', false);
+  LoadColor(ThemeSelectS.STUColR, ThemeSelectS.STUColG, ThemeSelectS.STUColB, ReadString(SectionList, 'STUColor', ''));
+
   ThemeSelectS.showArrows := ReadBool(SectionList, 'ShowArrows', false);
   ThemeSelectS.oneItemOnly := ReadBool(SectionList, 'OneItemOnly', false);
 end;
@@ -2865,13 +3114,24 @@ begin
   IniFile := ResolveThemeFile('Colors');
   IniFile.ReadSection('Colors', SL);
 
+  // colours only defined by the skin
+  if (Skin.SkinColors <> nil) then
+    for C := 0 to Skin.SkinColors.Count-1 do
+      if (SL.IndexOf(Skin.SkinColors.Names[C]) < 0) then
+        SL.Add(Skin.SkinColors.Names[C]);
+
   // normal colors
   SetLength(Color, SL.Count);
   for C := 0 to SL.Count-1 do
   begin
     Color[C].Name := SL.Strings[C];
 
-    S := IniFile.ReadString('Colors', SL.Strings[C], '');
+    S := '';
+    if (Skin.SkinColors <> nil) then
+      S := Trim(Skin.SkinColors.Values[SL.Strings[C]]);
+    if (S = '') then
+      S := IniFile.ReadString('Colors', SL.Strings[C], '');
+    S := Trim(S);
 
     Color[C].RGB.R := StrToInt(Copy(S, 1, Pos(' ' , S)-1))/255;
     Delete(S, 1, Pos(' ', S));
@@ -3823,6 +4083,38 @@ begin
 
 end;
 
+procedure TTheme.ThemeLoadLoadingMark;
+  function ReadList(const S: string): TIntList;
+  var
+    Parts: TStringList;
+    I: integer;
+  begin
+    SetLength(Result, 0);
+    Parts := TStringList.Create;
+    try
+      Parts.Delimiter := ',';
+      Parts.StrictDelimiter := true;
+      Parts.DelimitedText := S;
+      for I := 0 to Parts.Count - 1 do
+        if Trim(Parts[I]) <> '' then
+        begin
+          SetLength(Result, Length(Result) + 1);
+          Result[High(Result)] := StrToIntDef(Trim(Parts[I]), -1);
+        end;
+    finally
+      Parts.Free;
+    end;
+  end;
+var
+  SL: TThemeSectionList;
+begin
+  SL := GetSectionList('LoadingMark');
+  Loading.MarkNotes := ReadList(ReadString(SL, 'Notes', ''));
+  Loading.MarkTexts := ReadList(ReadString(SL, 'Texts', ''));
+  Loading.MarkLine := ReadInteger(SL, 'Line', -1);
+  Loading.MarkDot := ReadInteger(SL, 'Dot', -1);
+end;
+
 procedure TTheme.ThemeSongLoad;
 var
   I, C: integer;
@@ -3873,6 +4165,22 @@ begin
   //Rap Icons
   ThemeLoadStatic(Song.RapIcon, 'Song' + prefix + 'RapIcon');
   ThemeLoadStatic(Song.RapToFreestyleIcon, 'Song' + prefix + 'RapToFreestyleIcon');
+
+  Song.HasDetail := SectionExists('Song' + prefix + 'DetailTitle', Song.HasDetail) and Song.HasDetail;
+  ThemeLoadText(Song.DetailTitle, 'Song' + prefix + 'DetailTitle');
+  ThemeLoadText(Song.TextInfo, 'Song' + prefix + 'TextInfo');
+  ThemeLoadText(Song.DetailArtist, 'Song' + prefix + 'DetailArtist');
+  ThemeLoadText(Song.DetailYear, 'Song' + prefix + 'DetailYear');
+  ThemeLoadStatic(Song.DetailVideoIcon, 'Song' + prefix + 'DetailVideoIcon');
+  ThemeLoadStatic(Song.DetailMedleyIcon, 'Song' + prefix + 'DetailMedleyIcon');
+  ThemeLoadStatic(Song.DetailCalculatedMedleyIcon, 'Song' + prefix + 'DetailCalculatedMedleyIcon');
+  ThemeLoadStatic(Song.DetailDuetIcon, 'Song' + prefix + 'DetailDuetIcon');
+  ThemeLoadStatic(Song.DetailRapIcon, 'Song' + prefix + 'DetailRapIcon');
+  ThemeLoadStatic(Song.DetailRapToFreestyleIcon, 'Song' + prefix + 'DetailRapToFreestyleIcon');
+  Song.IconFlow := ReadInteger(GetSectionList('Song' + prefix + 'Icons'), 'Flow', 0);
+  Song.IconGap := ReadInteger(GetSectionList('Song' + prefix + 'Icons'), 'Gap', 8);
+  Song.CoverSquare := ReadInteger(GetSectionList('Song' + prefix + 'CoverShape'), 'Square', 0) <> 0;
+  Song.CoverRadius := ReadInteger(GetSectionList('Song' + prefix + 'CoverShape'), 'Radius', 0) / 1000;
 
   //Show Cat in TopLeft Mod
   ThemeLoadStatic(Song.StaticCat, 'Song' + prefix + 'StaticCat');

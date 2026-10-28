@@ -217,6 +217,8 @@ var
 implementation
 
 uses
+  UMenuStatic,
+  UMenuText,
   Classes,
   Math,
   UDatabase,
@@ -676,6 +678,41 @@ begin
   inherited;
 end;
 
+{ the player's static as a box in the player's colour around the name (theme
+  NameBoxPad): as wide as the name, the name in dark or light, whichever
+  reads better on that colour }
+procedure FitNameBox(StaticIdx, TextIdx: integer);
+var
+  S: TStatic;
+  Tx: TText;
+  W, L: real;
+begin
+  if (StaticIdx < 0) or (StaticIdx > High(ScreenSing.Statics)) or
+     (TextIdx < 0) or (TextIdx > High(ScreenSing.Text)) then
+    Exit;
+  S := ScreenSing.Statics[StaticIdx];
+  Tx := ScreenSing.Text[TextIdx];
+  SetFontFamily(Tx.Font);
+  SetFontStyle(Tx.Style);
+  SetFontSize(Tx.Size);
+  SetFontItalic(false);
+  W := TextWidth(Tx.Text);
+  if (Tx.W > 0) and (W > Tx.W) then
+    W := Tx.W;
+  S.Texture.X := Tx.X - Theme.Sing.NoteArea.NameBoxPad;
+  S.Texture.W := W + 2 * Theme.Sing.NoteArea.NameBoxPad;
+  L := 0.2126 * S.Texture.ColR + 0.7152 * S.Texture.ColG + 0.0722 * S.Texture.ColB;
+  if (L > 0.5) then
+  begin
+    Tx.ColR := 0.055; Tx.ColG := 0.059; Tx.ColB := 0.071;
+  end
+  else
+  begin
+    Tx.ColR := 0.95; Tx.ColG := 0.95; Tx.ColB := 0.94;
+  end;
+  Tx.Shadow := 0;
+end;
+
 function TScreenSingView.Draw: boolean;
 var
   DisplayTime:            real;
@@ -691,6 +728,13 @@ var
   medley_start_applause:  boolean;
 begin
   ScreenSing.Background.Draw;
+
+  if (Theme.Sing.NoteArea.NameBoxPad > 0) then
+  begin
+    FitNameBox(StaticP1[0], TextP1);
+    FitNameBox(StaticP1TwoP[0], TextP1TwoP);
+    FitNameBox(StaticP2R[0], TextP2R);
+  end;
 
   // sound enabled/disabled (Party plugins)
   if not(ScreenSing.Settings.SoundEnabled) and not(lastVolume=0) then
@@ -888,6 +932,9 @@ begin
     ScreenSing.fCurrentVideo.SetScreen(ScreenAct);
     ScreenSing.fCurrentVideo.Draw;
   end;
+
+  // note lanes (theme backgrounds) go below the statics and texts
+  SingDrawLanes;
 
   // draw static menu (FG)
   ScreenSing.DrawFG;

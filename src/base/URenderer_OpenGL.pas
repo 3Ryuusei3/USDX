@@ -729,6 +729,8 @@ var
   Bytes: GLuint;
   ColorR, ColorG, ColorB: single;
   X2, Y2: single;
+  RotCX, RotCY, RotS, RotC, RotDX, RotDY: single;
+  V: integer;
 begin
   Tex := TTexture_OpenGL(Texture);
   if (Tex.TexID = 0) then
@@ -835,6 +837,22 @@ begin
     begin
       Buffer[VERTEX_BOTTOMRIGHT_OFFSET + X_OFFSET] := Buffer[VERTEX_BOTTOMRIGHT_OFFSET + X_OFFSET] + Shear;
       Buffer[VERTEX_BOTTOMLEFT_OFFSET + X_OFFSET] := Buffer[VERTEX_BOTTOMLEFT_OFFSET + X_OFFSET] + Shear;
+    end;
+
+    // rotation around the centre
+    if (Rot <> 0) then
+    begin
+      RotCX := X + W / 2;
+      RotCY := Y + H / 2;
+      RotS := Sin(Rot);
+      RotC := Cos(Rot);
+      for V := 0 to 3 do
+      begin
+        RotDX := Buffer[V * VERTEX_STRIDE + X_OFFSET] - RotCX;
+        RotDY := Buffer[V * VERTEX_STRIDE + Y_OFFSET] - RotCY;
+        Buffer[V * VERTEX_STRIDE + X_OFFSET] := RotCX + RotDX * RotC - RotDY * RotS;
+        Buffer[V * VERTEX_STRIDE + Y_OFFSET] := RotCY + RotDX * RotS + RotDY * RotC;
+      end;
     end;
 
     // Now do the reflection
@@ -1570,7 +1588,9 @@ end;
 
 procedure TRenderer_OpenGLBase.SetScissorRect(X, Y: integer; W, H: cardinal);
 begin
-  glScissor(X, Y, W, H);
+  // callers give coordinates within the drawn area; add its offset in the
+  // window (bars when the aspect ratio is kept)
+  glScissor(X + ViewOffX, Y + ViewOffY, W, H);
   {$IFDEF DEBUG_MODE}
   RaiseExceptionIfError;
   {$ENDIF};
@@ -1699,13 +1719,13 @@ begin
   begin
     ProjectionMatrix.data[0,0] := 2 / (RenderW - NewX);
     ProjectionMatrix.data[0,3] := -1 * ((RenderW + NewX) / (RenderW - NewX));
-    glViewport(WindowBoundary, ViewPortArray[1], (ScreenAct * ScreenWPerScreen) - WindowBoundary, ViewPortArray[3]);
+    glViewport(ViewOffX + WindowBoundary, ViewPortArray[1], (ScreenAct * ScreenWPerScreen) - WindowBoundary, ViewPortArray[3]);
   end
   else
   begin
     ProjectionMatrix.data[0,0] := 2 / NewX;
     ProjectionMatrix.data[0,3] := -1;
-    glViewPort((ScreenAct - 1) * ScreenWPerScreen, ViewPortArray[1], WindowBoundary - (ScreenAct - 1) * ScreenWPerScreen, ViewPortArray[3]);
+    glViewPort(ViewOffX + (ScreenAct - 1) * ScreenWPerScreen, ViewPortArray[1], WindowBoundary - (ScreenAct - 1) * ScreenWPerScreen, ViewPortArray[3]);
   end;
   UpdateTransformText := true;
   {$IFDEF DEBUG_MODE}
@@ -1751,7 +1771,7 @@ begin
   RowSize := ((ScreenW*3 + (Align-1)) div Align) * Align;
 
   GetMem(Result, RowSize * ScreenH);
-  glReadPixels(0, 0, ScreenW, ScreenH, GL_RGB, GL_UNSIGNED_BYTE, Result);
+  glReadPixels(ViewOffX, ViewOffY, ScreenW, ScreenH, GL_RGB, GL_UNSIGNED_BYTE, Result);
 end;
 
 {$IFDEF DEBUG_MODE}

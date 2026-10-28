@@ -1548,6 +1548,7 @@ var
   Posx:  real;
   Posy:  real;
   Width: real;
+  Height: real;
   ThemeIndex: integer;
 begin
   ThemeIndex := PlayerPositionMap[PlayerNumber-1].Position;
@@ -1557,14 +1558,18 @@ begin
     PosX := Theme.Score.StaticRatings[ThemeIndex].X + (Theme.Score.StaticRatings[ThemeIndex].W  * 0.5);
     PosY := Theme.Score.StaticRatings[ThemeIndex].Y + (Theme.Score.StaticRatings[ThemeIndex].H  * 0.5); ;
 
+    // the rating grows to the size of its theme box (classic themes use a
+    // square box; a wide box keeps its proportions)
     Width := aPlayerScoreScreenRatings[PlayerNumber].RateEaseValue/2;
+    Height := Width * Theme.Score.StaticRatings[ThemeIndex].H / Theme.Score.StaticRatings[ThemeIndex].W;
 
     with Tex_Score_Ratings[Rating] do
     begin
       X := PosX - Width;
-      Y := PosY - Width;
+      Y := PosY - Height;
       W := 2 * Width;
-      H := 2 * Width;
+      H := 2 * Height;
+      Z := Theme.Score.StaticRatings[ThemeIndex].Z;
     end;
     Renderer.DrawTexture(Tex_Score_Ratings[Rating]);
   end;

@@ -68,6 +68,9 @@ var
   CurrentFont: TFont;
   FontFamilyNames: array of UTF8String;
   FontSections: TStringList;
+  // > 0: texts get a soft dark shadow of about this many pixels (reset it
+  // after drawing)
+  FontShadow: single;
 
 procedure LoadFontFamilyNames;
 procedure BuildFonts;                         // builds all fonts
@@ -287,15 +290,38 @@ begin
 end;
 
 // Custom GL "Print" Routine
+var
+  LastColR, LastColG, LastColB, LastColA: single;
+
 procedure PrintText(const Text: UTF8String);
+const
+  // offsets of the shadow copies (unit circle, slightly downwards)
+  SDX: array[0..7] of single = (1, 0.71, 0, -0.71, -1, -0.71, 0, 0.71);
+  SDY: array[0..7] of single = (0, 0.71, 1, 0.71, 0, -0.71, -1, -0.71);
 var
   GLFont: PGLFont;
+  I, Ring: integer;
+  R: single;
 begin
   // if there is no text do nothing
   if (Text = '') then
     Exit;
 
   GLFont := @Fonts[CurrentFont.FontFamily][CurrentFont.FontStyle];
+
+  // soft shadow: faint dark copies around a point a little below the text
+  if (FontShadow > 0) then
+  begin
+    GLFont.Font.SetColor(0, 0, 0, LastColA * 0.11);
+    for Ring := 1 to 2 do
+    begin
+      R := FontShadow * Ring / 2;
+      for I := 0 to 7 do
+        GLFont.Font.Print(Text, GLFont.X + SDX[I] * R, GLFont.Y + FontShadow * 0.45 + SDY[I] * R + GLFont.Font.Ascender,
+                          GLFont.Z);
+    end;
+    GLFont.Font.SetColor(LastColR, LastColG, LastColB, LastColA);
+  end;
 
   // draw string
   GLFont.Font.Print(Text, GLFont.X, GLFont.Y + GLFont.Font.Ascender, GLFont.Z);
@@ -378,6 +404,10 @@ end;
 
 procedure SetFontColor(R, G, B, A: single);
 begin
+  LastColR := R;
+  LastColG := G;
+  LastColB := B;
+  LastColA := A;
   Fonts[CurrentFont.FontFamily][CurrentFont.FontStyle].Font.SetColor(R, G, B, A);
 end;
 

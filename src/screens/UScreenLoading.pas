@@ -41,6 +41,10 @@ uses
   sdl2;
 
 type
+  TRect4 = record
+    X, Y, W, H: real;
+  end;
+
   TScreenLoading = class(TMenu)
     private
       DiscoveryBarBaseIndex: integer;
@@ -52,6 +56,15 @@ type
       DiscoveryBarAlpha: real;
       LoadingBarAlpha: real;
       LastRedrawTicks: cardinal;
+      // animated mark (see TThemeLoading.Mark*)
+      StartTicks: cardinal;
+      NoteBase: array of TRect4;
+      NoteFill: array of integer;   // statics that fill each bar as it is sung
+      LineIdx, DotIdx: integer;     // the marker, drawn over the fills
+      LineBase, DotBase: TRect4;
+      TextBaseY: array of real;
+      procedure AnimateMark;
+      procedure StoreMark;
       function ClampProgress(Current, Total: integer): real;
       function AddProgressOverlay(SourceBarIndex: integer; Alpha: real): integer;
       procedure UpdateBar(BaseBarIndex, FillBarIndex: integer; Progress, BaseAlpha, FillAlpha: real);
@@ -62,6 +75,7 @@ type
 
       constructor Create; override;
       procedure OnShow; override;
+      function Draw: boolean; override;
       function ParseInput(PressedKey: cardinal; CharCode: UCS4Char; PressedDown: boolean): boolean; override;
       procedure SetDiscoveryProgress(Current, Total, SongsFound: integer);
       procedure SetSongLoadingProgress(Current, Total: integer);
@@ -72,10 +86,16 @@ type
 implementation
 
 uses
+  Math,
   UGraphic,
   UDisplay,
+  ULanguage,
   URenderer,
   UTime;
+
+const
+  // the empty part of a progress bar, relative to the filled part
+  TrackAlpha = 0.25;
 
 function TScreenLoading.ParseInput(PressedKey: cardinal; CharCode: UCS4Char; PressedDown: boolean): boolean;
 begin
@@ -125,9 +145,10 @@ begin
     StatusTextBase := '';
   end;
 
+  StoreMark;
   LastRedrawTicks := 0;
-  UpdateBar(DiscoveryBarBaseIndex, DiscoveryBarFillIndex, 0, DiscoveryBarAlpha * 0.5, DiscoveryBarAlpha);
-  UpdateBar(LoadingBarBaseIndex, LoadingBarFillIndex, 0, LoadingBarAlpha * 0.5, LoadingBarAlpha);
+  UpdateBar(DiscoveryBarBaseIndex, DiscoveryBarFillIndex, 0, DiscoveryBarAlpha * TrackAlpha, DiscoveryBarAlpha);
+  UpdateBar(LoadingBarBaseIndex, LoadingBarFillIndex, 0, LoadingBarAlpha * TrackAlpha, LoadingBarAlpha);
   UpdateStatus('');
   RefreshProgress(true);
   Fadeout := false;
@@ -136,6 +157,162 @@ end;
 procedure TScreenLoading.OnShow;
 begin
   inherited;
+end;
+
+function StaticRect(S: TStatic): TRect4;
+begin
+  Result.X := S.Texture.X;
+  Result.Y := S.Texture.Y;
+  Result.W := S.Texture.W;
+  Result.H := S.Texture.H;
+end;
+
+procedure TScreenLoading.StoreMark;
+var
+  I: integer;
+begin
+  StartTicks := SDL_GetTicks();
+  SetLength(NoteBase, Length(Theme.Loading.MarkNotes));
+  SetLength(NoteFill, Length(Theme.Loading.MarkNotes));
+  for I := 0 to High(NoteBase) do
+  begin
+    NoteFill[I] := -1;
+    if (Theme.Loading.MarkNotes[I] >= 0) and (Theme.Loading.MarkNotes[I] < Length(Statics)) then
+    begin
+      NoteBase[I] := StaticRect(Statics[Theme.Loading.MarkNotes[I]]);
+      NoteFill[I] := AddProgressOverlay(Theme.Loading.MarkNotes[I], 1);
+    end;
+  end;
+  // the marker goes on top of the fills: copies at the end, originals hidden
+  LineIdx := -1;
+  DotIdx := -1;
+  if (Theme.Loading.MarkLine >= 0) and (Theme.Loading.MarkLine < Length(Statics)) then
+  begin
+    LineBase := StaticRect(Statics[Theme.Loading.MarkLine]);
+    LineIdx := AddProgressOverlay(Theme.Loading.MarkLine, Statics[Theme.Loading.MarkLine].Texture.Alpha);
+    Statics[LineIdx].Texture.W := LineBase.W;
+    Statics[Theme.Loading.MarkLine].Visible := false;
+  end;
+  if (Theme.Loading.MarkDot >= 0) and (Theme.Loading.MarkDot < Length(Statics)) then
+  begin
+    DotBase := StaticRect(Statics[Theme.Loading.MarkDot]);
+    DotIdx := AddProgressOverlay(Theme.Loading.MarkDot, Statics[Theme.Loading.MarkDot].Texture.Alpha);
+    Statics[DotIdx].Texture.W := DotBase.W;
+    Statics[Theme.Loading.MarkDot].Visible := false;
+  end;
+  SetLength(TextBaseY, Length(Theme.Loading.MarkTexts));
+  for I := 0 to High(TextBaseY) do
+    if (Theme.Loading.MarkTexts[I] >= 0) and (Theme.Loading.MarkTexts[I] < Length(Text)) then
+      TextBaseY[I] := Text[Theme.Loading.MarkTexts[I]].Y;
+end;
+
+const
+  MARK_PERIOD = 2600;  // ms of one pass of the pitch marker
+  MARK_INTRO = 700;    // ms of the fade in of the texts
+
+{ the mark comes alive: the pitch marker runs over the note bars again and
+  again, its dot rides on the bar under it, and each bar lights up and swells
+  a little while it is being "sung"; the texts rise and fade in at the start }
+procedure TScreenLoading.AnimateMark;
+var
+  T, P, MX, X1, X2, E, Lit, DotY, Fade: real;
+  I, Under, Prev, Next: integer;
+  Now: cardinal;
+  S: TStatic;
+  function NoteCY(N: integer): real;
+  begin
+    Result := NoteBase[N].Y + NoteBase[N].H / 2;
+  end;
+begin
+  if (Length(NoteBase) = 0) or (LineIdx < 0) then
+    Exit;
+  Now := SDL_GetTicks();
+  T := Now - StartTicks;
+
+  // texts: rise and fade in
+  E := Min(1, T / MARK_INTRO);
+  E := 1 - (1 - E) * (1 - E) * (1 - E);
+  for I := 0 to High(TextBaseY) do
+    if (Theme.Loading.MarkTexts[I] >= 0) and (Theme.Loading.MarkTexts[I] < Length(Text)) then
+    begin
+      Text[Theme.Loading.MarkTexts[I]].Y := TextBaseY[I] + 14 * (1 - E);
+      Text[Theme.Loading.MarkTexts[I]].Alpha := E;
+    end;
+
+  // marker position: from a bit before the first bar to a bit after the last
+  X1 := NoteBase[0].X - 16;
+  X2 := NoteBase[High(NoteBase)].X + NoteBase[High(NoteBase)].W + 16;
+  P := Frac(T / MARK_PERIOD);
+  // ease in and out, so it rests briefly at both ends
+  P := P * P * (3 - 2 * P);
+  MX := X1 + (X2 - X1) * P;
+
+  // the bar under the marker (or the neighbours around it)
+  Under := -1;
+  Prev := -1;
+  Next := -1;
+  for I := 0 to High(NoteBase) do
+  begin
+    if (MX >= NoteBase[I].X) and (MX <= NoteBase[I].X + NoteBase[I].W) then
+      Under := I;
+    if (NoteBase[I].X + NoteBase[I].W < MX) then
+      Prev := I;
+    if (Next < 0) and (NoteBase[I].X > MX) then
+      Next := I;
+  end;
+  if (Under >= 0) then
+    DotY := NoteCY(Under)
+  else if (Prev >= 0) and (Next >= 0) then
+  begin
+    E := (MX - (NoteBase[Prev].X + NoteBase[Prev].W)) / Max(1, NoteBase[Next].X - (NoteBase[Prev].X + NoteBase[Prev].W));
+    E := E * E * (3 - 2 * E);
+    DotY := NoteCY(Prev) + (NoteCY(Next) - NoteCY(Prev)) * E;
+  end
+  else if (Next >= 0) then
+    DotY := NoteCY(Next)
+  else
+    DotY := NoteCY(High(NoteBase));
+
+  // the bars are empty tracks; each one fills with colour from its left end
+  // as the marker passes over it, like a sung note. At the end of the pass
+  // the filled bars fade out and it starts again
+  Fade := 1;
+  if (Frac(T / MARK_PERIOD) > 0.86) then
+    Fade := Max(0, 1 - (Frac(T / MARK_PERIOD) - 0.86) / 0.12);
+  for I := 0 to High(NoteBase) do
+  begin
+    if (Theme.Loading.MarkNotes[I] < 0) or (Theme.Loading.MarkNotes[I] >= Length(Statics)) then
+      Continue;
+    S := Statics[Theme.Loading.MarkNotes[I]];
+    S.Texture.Alpha := 0.22;
+    if (NoteFill[I] < 0) then
+      Continue;
+    Lit := Min(1, Max(0, (MX - NoteBase[I].X) / Max(1, NoteBase[I].W)));
+    S := Statics[NoteFill[I]];
+    S.Visible := Lit > 0.001;
+    S.Texture.X := NoteBase[I].X;
+    S.Texture.Y := NoteBase[I].Y;
+    S.Texture.H := NoteBase[I].H;
+    S.Texture.W := NoteBase[I].W * Lit;
+    S.Texture.TexX1 := 0;
+    S.Texture.TexX2 := Lit;
+    S.Texture.Alpha := Fade;
+  end;
+
+  S := Statics[LineIdx];
+  S.Texture.X := MX - LineBase.W / 2;
+  if (DotIdx >= 0) then
+  begin
+    S := Statics[DotIdx];
+    S.Texture.X := MX - DotBase.W / 2;
+    S.Texture.Y := DotY - DotBase.H / 2;
+  end;
+end;
+
+function TScreenLoading.Draw: boolean;
+begin
+  AnimateMark;
+  Result := inherited Draw;
 end;
 
 function TScreenLoading.ClampProgress(Current, Total: integer): real;
@@ -194,30 +371,40 @@ begin
   end;
 end;
 
+// the status line says what is happening in words: "Looking for songs ·
+// 120 found", "Reading songs · 80 of 120"
 procedure TScreenLoading.SetDiscoveryProgress(Current, Total, SongsFound: integer);
 begin
-  UpdateBar(DiscoveryBarBaseIndex, DiscoveryBarFillIndex, ClampProgress(Current, Total), DiscoveryBarAlpha * 0.5, DiscoveryBarAlpha);
-  if SongsFound > 0 then
-    UpdateStatus(Format('0 / %5d', [SongsFound]))
-  else
-    UpdateStatus('');
+  UpdateBar(DiscoveryBarBaseIndex, DiscoveryBarFillIndex, ClampProgress(Current, Total), DiscoveryBarAlpha * TrackAlpha, DiscoveryBarAlpha);
+  if (StatusTextIndex >= 0) then
+  begin
+    if SongsFound > 0 then
+      Text[StatusTextIndex].Text := Format(Language.Translate('LOADING_FOUND'), [SongsFound])
+    else
+      Text[StatusTextIndex].Text := Language.Translate('LOADING_SEARCHING');
+  end;
   RefreshProgress;
 end;
 
 procedure TScreenLoading.SetSongLoadingProgress(Current, Total: integer);
 begin
-  UpdateBar(LoadingBarBaseIndex, LoadingBarFillIndex, ClampProgress(Current, Total), LoadingBarAlpha * 0.5, LoadingBarAlpha);
-  if Total > 0 then
-    UpdateStatus(Format('%5d / %5d', [Current, Total]))
-  else
-    UpdateStatus('');
+  UpdateBar(LoadingBarBaseIndex, LoadingBarFillIndex, ClampProgress(Current, Total), LoadingBarAlpha * TrackAlpha, LoadingBarAlpha);
+  if (StatusTextIndex >= 0) then
+  begin
+    if Total > 0 then
+      Text[StatusTextIndex].Text := Format(Language.Translate('LOADING_SONGS'), [Current, Total])
+    else
+      Text[StatusTextIndex].Text := StatusTextBase;
+  end;
   RefreshProgress;
 end;
 
+// steps of the start (e.g. "Loading ScreenSong") are not shown, they mean
+// nothing to the player
 procedure TScreenLoading.SetStatus(const Value: UTF8String);
 begin
   if (StatusTextIndex >= 0) and (StatusTextIndex < Length(Text)) then
-    Text[StatusTextIndex].Text := Value;
+    Text[StatusTextIndex].Text := StatusTextBase;
   RefreshProgress(true);
 end;
 
@@ -229,7 +416,7 @@ begin
     Exit;
 
   NowTicks := SDL_GetTicks;
-  if not Force and (LastRedrawTicks <> 0) and (NowTicks - LastRedrawTicks < 100) then
+  if not Force and (LastRedrawTicks <> 0) and (NowTicks - LastRedrawTicks < 30) then
     Exit;
 
   Self.Draw;
