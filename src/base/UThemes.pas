@@ -625,6 +625,7 @@ type
       HudW: integer;
       HudX, HudY, HudH: integer;            // offset from the lane's corner; height (0: the lane's)
       NameBoxPad: integer;                  // > 0: the player static becomes a box around the name
+      NameBoxFixed: integer;                // > 0: the box keeps the theme's size (only the text colour adapts)
       HudAlpha: real;
       LanePad3: integer;                    // side room of the 3-row veils
       MissScale: real;                      // height of sung notes that miss the tone
@@ -719,6 +720,7 @@ type
   end;
 
   TThemeScore = class(TThemeBasic)
+    InstantBars:      boolean;   // [ScoreBars] Instant=1: bars and points appear without easing
     TextArtist:       TThemeText;
     TextTitle:        TThemeText;
 
@@ -1908,6 +1910,7 @@ begin
 
       // Score
       ThemeLoadBasic(Score, 'Score');
+      Score.InstantBars := ThemeIni.ReadInteger('ScoreBars', 'Instant', 0) = 1;
 
       ThemeLoadText(Score.TextArtist, 'ScoreTextArtist');
       ThemeLoadText(Score.TextTitle, 'ScoreTextTitle');
@@ -2484,6 +2487,7 @@ begin
     HudY         := ReadInteger(SectionList, 'HudY', 0);
     HudH         := ReadInteger(SectionList, 'HudH', 0);
     NameBoxPad   := ReadInteger(SectionList, 'NameBoxPad', 0);
+    NameBoxFixed := ReadInteger(SectionList, 'NameBoxFixed', 0);
     HudAlpha     := ReadFloat(SectionList, 'HudAlpha', 0);
     LanePad3     := ReadInteger(SectionList, 'LanePad3', 16);
     MissScale    := ReadFloat(SectionList, 'MissScale', 0.65);
@@ -4033,6 +4037,7 @@ begin
   Score.Free;
   Score := TThemeScore.Create;
   ThemeLoadBasic(Score, 'Score');
+  Score.InstantBars := ThemeIni.ReadInteger('ScoreBars', 'Instant', 0) = 1;
 
   ThemeLoadText(Score.TextArtist, 'ScoreTextArtist');
   ThemeLoadText(Score.TextTitle, 'ScoreTextTitle');

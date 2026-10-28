@@ -1338,6 +1338,12 @@ begin
   BarScore_EaseOut_Step  := 1;
   BarPhrase_EaseOut_Step := 1;
   BarGolden_EaseOut_Step := 1;
+  if Theme.Score.InstantBars then
+  begin
+    BarScore_EaseOut_Step  := EaseOut_MaxSteps * 10;
+    BarPhrase_EaseOut_Step := EaseOut_MaxSteps * 10;
+    BarGolden_EaseOut_Step := EaseOut_MaxSteps * 10;
+  end;
 
   BarTime := SDL_GetTicks();
 end;
