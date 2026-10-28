@@ -699,8 +699,11 @@ begin
   W := TextWidth(Tx.Text);
   if (Tx.W > 0) and (W > Tx.W) then
     W := Tx.W;
-  S.Texture.X := Tx.X - Theme.Sing.NoteArea.NameBoxPad;
-  S.Texture.W := W + 2 * Theme.Sing.NoteArea.NameBoxPad;
+  if (Theme.Sing.NoteArea.NameBoxFixed = 0) then
+  begin
+    S.Texture.X := Tx.X - Theme.Sing.NoteArea.NameBoxPad;
+    S.Texture.W := W + 2 * Theme.Sing.NoteArea.NameBoxPad;
+  end;
   L := 0.2126 * S.Texture.ColR + 0.7152 * S.Texture.ColG + 0.0722 * S.Texture.ColB;
   if (L > 0.5) then
   begin
