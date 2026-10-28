@@ -555,9 +555,9 @@ def song_list(b):
 # ---------------------------------------------------------------------------
 # Singing
 # ---------------------------------------------------------------------------
-LS = 18                    # line spacing (pitch step = LS / 2): tall rows
+LS = 16                    # line spacing (pitch step = LS / 2)
 LANE_X, LANE_W, LANE_H = 32, W - 64, 9 * LS + 20
-PILL_H = 32                # height of each player's score row, just above its staff
+PILL_H = 40                # height of each player's row above its staff (8 px of air under the content)
 LANES = (92, 408)          # top of the lane of player 1 and player 2
 LYRICS_Y, LYRICS_H = 596, 104
 
@@ -579,33 +579,39 @@ def sing(b):
         LineColor="ScrimText", LineAlpha=0.18,
         LaneTex=a.panel(LANE_W, LANE_H, 20), LaneLeft=LANE_X, LaneRight=LANE_X + LANE_W,
         LanePadTop=10, LanePadBottom=LANE_H - 9 * LS - 10, LaneColor="Scrim", LaneAlpha=0,
-        HudW=0, HudAlpha=0, NameBoxPad=10))
+        HudW=0, HudAlpha=0, NameBoxPad=14, NameBoxFixed=1))
 
-    # each player's row just above its staff, without any panel: the name in
-    # a box of the player's colour at the left end (the game sizes the box to
-    # the name, NameBoxPad, and picks a dark or light text); the sing bar and
-    # the score at the right end, with a soft shadow (Shadow) so they read
-    # over any video. ScoreBG is empty (W = 0).
+    # each player's row just above its staff, without any panel: the
+    # oscilloscope at the left end; at the right end, from the right, the name
+    # in a pill of the player's colour (fixed size; the game picks a dark or
+    # light text, NameBoxFixed), the score with the sing bar under it, and
+    # the line bonus badge. The score and the bar have a soft shadow (Shadow)
+    # so they read over any video. ScoreBG is empty (W = 0).
     ini.set("SingDefaultScoreBG", od(Tex="ScoreBG", W=0, H=PILL_H, Type="Colorized"))
-    # line bonus: a badge that pops up left of the sing bar
-    ini.set("SingLineBonus", od(W=150, H=PILL_H - 4, Y=2, Size=16, Font=FONT_INTER, Style=1))
+    # line bonus: a badge that pops up left of the score
+    ini.set("SingLineBonus", od(W=150, H=28, Y=2, Size=16, Font=FONT_INTER, Style=1))
 
-    L = LANE_X + 24                          # left end of the row
-    R = LANE_X + LANE_W - 8                  # right end of the row
+    GAP = 8
+    PILL_W, SCORE_W = 112, 50
+    L = LANE_X + 24                          # left end of the row: the oscilloscope
+    RN = LANE_X + LANE_W - 24                # right end of the row (the pill ends here)
+    PX = RN - PILL_W                         # pill
+    SX = PX - GAP - SCORE_W                  # score and bar
 
     def player(prefix, lane_top, color):
         top = lane_top - PILL_H
-        ini.set("Sing%sStatic" % prefix, od(X=L, Y=top + 2, W=120, H=28, Tex=a.panel(160, 28, 8),
+        ini.set("Sing%sStatic" % prefix, od(X=PX, Y=top + 2, W=PILL_W, H=28, Tex=a.pill(PILL_W, 28),
                                             Color=color, Type="Transparent", Alpha=1))
-        ini.set("Sing%sAvatar" % prefix, od(X=L, Y=top + 2, W=0, H=0, Z=1, Alpha=0))
-        ini.set("Sing%sText" % prefix, od(X=L + 10, Y=top + 6, W=300, H=20, MinSize=12, Text="PLAYERNAME",
-                                          Font=FONT_INTER, Style=BOLD, Size=17, Color="ScrimText", Align=0))
+        ini.set("Sing%sAvatar" % prefix, od(X=PX, Y=top + 2, W=0, H=0, Z=1, Alpha=0))
+        ini.set("Sing%sText" % prefix, od(X=PX + PILL_W // 2, Y=top + 6, W=PILL_W - 20, H=20, MinSize=12,
+                                          Text="PLAYERNAME", Font=FONT_INTER, Style=BOLD, Size=17,
+                                          Color="ScrimText", Align=1))
         # X/Y place the line bonus badge (centred on X, see SingLineBonus)
-        ini.set("Sing%sStatic2" % prefix, od(X=R - 198 - 16 - 75, Y=top, W=0, H=PILL_H))
-        ini.set("Sing%sTextScore" % prefix, od(Text="00000", X=R - 74, Y=top + 1, Font=FONT_MONO, Style=BOLD,
-                                               Size=24, Color="ScrimText", Align=0, Shadow=3))
-        ini.set("Sing%sSingBar" % prefix, od(X=R - 198, Y=top + 12, W=110, H=8))
-        ini.set("Sing%sOscilloscope" % prefix, od(X=R - 496, Y=top + 4, W=120, H=24))
+        ini.set("Sing%sStatic2" % prefix, od(X=SX - GAP - 75, Y=top, W=0, H=PILL_H))
+        ini.set("Sing%sTextScore" % prefix, od(Text="00000", X=SX, Y=top + 5, Font=FONT_MONO, Style=BOLD,
+                                               Size=22, Color="ScrimText", Align=0, Shadow=3))
+        ini.set("Sing%sSingBar" % prefix, od(X=SX, Y=top + 29, W=SCORE_W, H=4))
+        ini.set("Sing%sOscilloscope" % prefix, od(X=L, Y=top + 4, W=120, H=24))
 
     player("P1", LANES[1], "P1Dark")          # one player: lower lane, next to the lyrics
     player("P1TwoP", LANES[0], "P1Dark")
@@ -683,6 +689,7 @@ def score(b):
     ini.remove_prefix("ScorePlayer", keep=())
     s = Screen(b, "Score")
     s.header(["Puntuaciones"])
+    ini.set("ScoreBars", od(Instant=1))      # the bars and points appear at once
     ini.set("ScoreTextArtistTitle", text_section("ArtistTitle", W - M, 26, 16, "Text2", align=2))
 
     def card(n, cx, cy, cw, ch, pcol):
@@ -963,6 +970,57 @@ GENERIC = ["JukeboxPlaylist", "PartyOptions", "PartyPlayer", "PartyRounds", "Par
            "PartyTournamentWin", "AboutMain", "StatMain", "StatDetail", "EditConvert", "EditOpen"]
 
 
+def party_rows(b):
+    """Party setup screens that are just a list of select slides: the same
+    rows as the settings pages (label box + value box), from the left margin."""
+    ini, a = b.ini, b.assets
+    row_h, vgap, lw, skip = 48, 8, 420, 8
+    vw = W - 2 * M - lw - skip
+    for prefix in ("PartyOptions", "PartyRounds", "PartyTournamentOptions", "PartyTournamentRounds"):
+        names = [n for n in ini.sections if re.match(r"^%sSelect\w+$" % prefix, n)]
+        names.sort(key=lambda n: int(resolved(ini, n).get("Y", 0)))
+        for i, n in enumerate(names):
+            old = resolved(ini, n)
+            ini.set(n, od(
+                Text=old.get("Text", ""), X=M, Y=120 + i * (row_h + vgap), W=lw, H=row_h, SkipX=skip, SBGW=vw,
+                TextSize=18, Font=FONT_INTER, Style=REGULAR, ArrowTint=1, ArrowW=24, ArrowH=24,
+                Tex=a.panel(lw, row_h, 12), Type="Transparent", TexSBG=a.panel(vw, row_h, 12), TypeSBG="Transparent",
+                Color="Surface2", DColor="Bg", TColor="Text", TDColor="Text2",
+                SBGColor="Accent", SBGDColor="Surface", STColor="OnAccent", STUColor="Text", STDColor="Text3"))
+
+
+def party_round(b):
+    """Next-round screen: the texts centred in their boxes."""
+    ini = b.ini
+    P = "PartyNewRound"
+
+    def geo(name):
+        r = resolved(ini, name)
+        return int(float(r.get("Y", 0))), int(float(r.get("H", 0)))
+
+    def put(text, static, size, dy=None):
+        sec = ini.get(P + text)
+        if sec is None or ini.get(P + static) is None:
+            return
+        sy, sh = geo(P + static)
+        sec["Size"] = str(size)
+        sec["Y"] = str(sy + ((sh - size) // 2 - 1 if dy is None else dy))
+
+    for i in (1, 2, 3):
+        put("TextNameTeam%d" % i, "StaticTeam%d" % i, 20, 8)
+        put("TextTeam%dPlayers" % i, "StaticTeam%d" % i, 14, 35)
+        put("TextScoreTeam%d" % i, "StaticTeam%d" % i, 30)
+        put("TextNextPlayer%d" % i, "StaticNextPlayer%d" % i, 20)
+    for i in range(1, 8):
+        put("TextRound%d" % i, "StaticRound%d" % i, 15)
+        put("TextWinner%d" % i, "StaticRound%d" % i, 15)
+    put("Text5", "Static2", 16)
+    put("Text6", "Static2", 16)
+    put("Text7", "Static3", 32)
+    put("TextNextRoundNo", "Static3", 32)
+    put("TextNextRound", "Static4", 17)
+
+
 def edit_menu(b):
     """Editor entry screen: import a MIDI file or go back."""
     ini, a = b.ini, b.assets
@@ -1122,6 +1180,8 @@ def build(b):
     options_sub(b)
     for prefix in GENERIC:
         generic_page(b, prefix)
+    party_rows(b)
+    party_round(b)
     edit_menu(b)
     popups(b)
     loading(b)
