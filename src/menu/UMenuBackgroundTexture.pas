@@ -48,6 +48,7 @@ type
     private
       Tex: TTexture;
       Color: TRGB;
+      Motion: real;
     public
       constructor Create(const ThemedSettings: TThemeBackground); override;
       procedure   Draw; override;
@@ -61,6 +62,8 @@ implementation
 uses
   USkins,
   SysUtils,
+  Math,
+  sdl2,
   UGraphic;
 
 constructor TMenuBackgroundTexture.Create(const ThemedSettings: TThemeBackground);
@@ -73,6 +76,7 @@ begin
     raise EMenuBackgroundError.Create('TMenuBackgroundTexture: No texture filename present');
 
   Color       := ThemedSettings.Color;
+  Motion      := ThemedSettings.Motion;
 
   texFilename := Skin.GetTextureFileName(ThemedSettings.Tex);
   Tex         := Renderer.GetTexture(texFilename, TEXTURE_TYPE_PLAIN);
@@ -88,6 +92,8 @@ begin
 end;
 
 procedure   TMenuBackgroundTexture.Draw;
+var
+  T: real;
 begin
   If (ScreenAct = 1) then //Clear just once when in dual screen mode
     Renderer.ClearFrameBuffer(CLEAR_DEPTH);
@@ -98,6 +104,15 @@ begin
     Y := 0;
     W := RenderW;
     H := RenderH;
+    if (Motion > 0) then
+    begin
+      // a larger image that drifts slowly (gradient backgrounds)
+      T := SDL_GetTicks() / 1000 * Motion;
+      W := RenderW * 1.3;
+      H := RenderH * 1.3;
+      X := -RenderW * 0.15 + Sin(T * 0.11) * RenderW * 0.13;
+      Y := -RenderH * 0.15 + Cos(T * 0.083) * RenderH * 0.13;
+    end;
     ColR := Color.R;
     ColG := Color.G;
     ColB := Color.B;

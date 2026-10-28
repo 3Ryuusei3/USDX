@@ -181,7 +181,7 @@ procedure TScreenOptionsGraphics.OnShow;
 begin
   inherited;
 
-  if CurrentWindowMode = Mode_Windowed then Ini.SetResolution(ScreenW, ScreenH);
+  if CurrentWindowMode = Mode_Windowed then Ini.SetResolution(WinW, WinH);
 
   UpdateWindowMode();
   UpdateResolution();
@@ -204,7 +204,7 @@ begin
 
   UpdateWindowMode;
 
-  if CurrentWindowMode = Mode_Windowed then Ini.SetResolution(ScreenW, ScreenH);
+  if CurrentWindowMode = Mode_Windowed then Ini.SetResolution(WinW, WinH);
   UpdateResolution;
 
 end;

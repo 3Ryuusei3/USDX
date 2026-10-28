@@ -34,6 +34,7 @@ interface
 {$I switches.inc}
 
 uses
+  Classes,
   UPath,
   UCommon;
 
@@ -56,6 +57,7 @@ type
   TSkin = class
     Skin:        array of TSkinEntry;
     SkinTexture: array of TSkinTexture;
+    SkinColors:  TStringList; // [Colors] of the skin (Name=R G B), override the theme's
     SkinPath:    IPath;
     Color:       integer;
     constructor Create;
@@ -80,7 +82,6 @@ implementation
 
 uses
   IniFiles,
-  Classes,
   SysUtils,
   Math,
   UIni,
@@ -175,6 +176,13 @@ begin
   end;
 
   SL.Free;
+
+  // a skin may recolour the theme, e.g. a different base colour
+  if (SkinColors = nil) then
+    SkinColors := TStringList.Create;
+  SkinColors.Clear;
+  SkinIni.ReadSectionValues('Colors', SkinColors);
+
   SkinIni.Free;
 end;
 

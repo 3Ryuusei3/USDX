@@ -49,6 +49,7 @@ type
 
       STicks:      cardinal;
       SelectBlink: boolean;
+      AnimStart:   cardinal;   // colour transition between Color and DColor
     public
       X:       single;
       Y:       single;
@@ -61,6 +62,10 @@ type
       ColR:    single;
       ColG:    single;
       ColB:    single;
+      // colour while the text's button is not selected (themes: DColor of a
+      // button text); only used when UseDColor is set
+      DColR, DColG, DColB: single;
+      UseDColor: boolean;
 
       Alpha:   single;
       Int:     single;
@@ -74,6 +79,13 @@ type
       ReflectionSpacing: single;
 
       Writable: boolean;
+
+      // with W and H set, long texts get smaller down to MinSize; below
+      // that they are cut with "..." (0: no limit)
+      MinSize: single;
+      Shadow:  single;   // soft dark shadow (px, 0: none)
+
+      function LineCount: integer;
 
       procedure SetSelect(Value: boolean);
       property Selected: boolean read SelectBool write SetSelect;
@@ -102,6 +114,12 @@ uses
 
 procedure TText.SetSelect(Value: boolean);
 begin
+  if UseDColor and (Value <> SelectBool) then
+  begin
+    AnimStart := SDL_GetTicks();
+    if (AnimStart = 0) then
+      AnimStart := 1;
+  end;
   SelectBool := Value;
 
   // set cursor visible
@@ -260,18 +278,33 @@ begin
   // until the text fits within the given height
   if (H > 0) and (Len * Size > H) then
   begin
-    if (DecFontSize) then
+    if DecFontSize and not ((MinSize > 0) and (Size - 1 < MinSize)) then
     begin
       Size := Size - 1; // round(Size * 0.95 * 10) / 10;
       SetText(Value);
     end
     else
     begin
-      Len := trunc(H / Size);
+      Len := Max(1, trunc(H / Size));
       SetLength(TextTiles, Len);
+      // make room for the dots
+      if (W > 0) then
+      begin
+        SetFontFamily(Font);
+        SetFontStyle(Style);
+        SetFontSize(Size);
+        while (Length(TextTiles[Len-1]) > 1) and (TextWidth(TextTiles[Len-1] + '...') > W) do
+          TextTiles[Len-1] := UTF8Copy(TextTiles[Len-1], 1, LengthUTF8(TextTiles[Len-1]) - 1);
+        TextTiles[Len-1] := TrimRight(TextTiles[Len-1]);
+      end;
       TextTiles[Len-1] := TextTiles[Len-1] + '...';
     end;
   end;
+end;
+
+function TText.LineCount: integer;
+begin
+  Result := Length(TextTiles);
 end;
 
 procedure TText.DeleteLastLetter;
@@ -281,6 +314,7 @@ end;
 
 procedure TText.Draw;
 var
+  E:      single;
   X2, Y2: single;
   tmpText2, Text2:  UTF8String;
   I:      integer;
@@ -293,7 +327,26 @@ begin
     SetFontSize(Size);
     SetFontItalic(false);
 
-    SetFontColor(ColR*Int, ColG*Int, ColB*Int, Alpha);
+    if UseDColor and (AnimStart <> 0) then
+    begin
+      // ease from the other colour to the current one
+      E := (SDL_GetTicks() - AnimStart) / 140;
+      if (E >= 1) then
+      begin
+        AnimStart := 0;
+        E := 1;
+      end
+      else
+        E := 1 - (1 - E) * (1 - E) * (1 - E);
+      if not SelectBool then
+        E := 1 - E; // E: share of the selected colour
+      SetFontColor((DColR + (ColR - DColR) * E) * Int, (DColG + (ColG - DColG) * E) * Int,
+                   (DColB + (ColB - DColB) * E) * Int, Alpha);
+    end
+    else if UseDColor and not SelectBool then
+      SetFontColor(DColR*Int, DColG*Int, DColB*Int, Alpha)
+    else
+      SetFontColor(ColR*Int, ColG*Int, ColB*Int, Alpha);
 
     // reflection
     if Reflection then
@@ -334,6 +387,7 @@ begin
     // now use always:
     // draw text as many strings
       Y2 := Y + MoveY;
+      FontShadow := Shadow;
       for I := 0 to High(TextTiles) do
       begin
         tmpText2 := TextTiles[I];
@@ -372,6 +426,7 @@ begin
       end;
 
       // reset to default
+      FontShadow := 0;
       SetFontFamily(0);
       SetFontStyle(ftRegular);
 

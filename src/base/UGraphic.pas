@@ -119,10 +119,20 @@ var
   CurrentWindowMode:      FullscreenModes;
   WindowModeDirty:        boolean;
 
-  RenderW:    integer;
-  RenderH:    integer;
+  RenderW:    integer = 800;  // virtual canvas the theme is laid out on
+  RenderH:    integer = 600;  // (set by the theme, see SetRenderSize)
+  // drawn area in pixels of the drawable (the whole window, or less when the
+  // theme keeps its aspect ratio: then ViewOffX/ViewOffY are the bars)
   ScreenW:    integer;
   ScreenH:    integer;
+  ViewOffX:   integer = 0;
+  ViewOffY:   integer = 0;
+  // window size in points (what SDL and the config use) and pixels per point
+  // (2 on a Retina display)
+  WinW:       integer;
+  WinH:       integer;
+  DrawScale:  single = 1;
+  KeepAspect: boolean = false;
   Screens:    integer;
   ScreenAct:  integer;
   ScreenWPerScreen: integer;
@@ -316,6 +326,9 @@ function HasWindowState(Flag: integer): boolean;
 procedure OnWindowMoved(x,y: integer);
 procedure OnWindowResized(w,h: integer);
 procedure CalculateScreenMetrics();
+procedure UpdateViewMetrics();
+procedure SetRenderSize(W, H: integer; Keep: boolean = false);
+procedure WindowToView(var X, Y: integer);
 
 
 implementation
@@ -328,6 +341,13 @@ uses
   UCommandLine,
   UPathUtils,
   UThemes;
+
+const
+  {$IFDEF DARWIN}
+  FULLSCREEN_FLAG = SDL_WINDOW_FULLSCREEN_DESKTOP;
+  {$ELSE}
+  FULLSCREEN_FLAG = SDL_WINDOW_FULLSCREEN;
+  {$ENDIF}
 
 var
   SingScreenTexturesLoaded: boolean = false;
@@ -566,7 +586,7 @@ begin
     end
   end
   else
-    SDL_SetWindowFullscreen(screen, SDL_WINDOW_FULLSCREEN);
+    SDL_SetWindowFullscreen(screen, FULLSCREEN_FLAG);
 
 
   // load icon image (must be 32x32 for win32)
@@ -732,21 +752,21 @@ NoDoubledResolution:
     Log.LogStatus('Set Video Mode...   Borderless fullscreen', 'SDL_SetVideoMode');
     CurrentWindowMode := Mode_Borderless;
     screen := SDL_CreateWindow('UltraStar Deluxe loading...',
-              Ini.PositionX, Ini.PositionY, W, H, SDL_WINDOW_OPENGL or SDL_WINDOW_FULLSCREEN_DESKTOP or SDL_WINDOW_RESIZABLE or SDL_WINDOW_HIDDEN);
+              Ini.PositionX, Ini.PositionY, W, H, SDL_WINDOW_OPENGL or SDL_WINDOW_FULLSCREEN_DESKTOP or SDL_WINDOW_RESIZABLE or SDL_WINDOW_HIDDEN or SDL_WINDOW_ALLOW_HIGHDPI);
   end
   else if Fullscreen then
   begin
     Log.LogStatus('Set Video Mode...   Fullscreen', 'SDL_SetVideoMode');
     CurrentWindowMode := Mode_Fullscreen;
     screen := SDL_CreateWindow('UltraStar Deluxe loading...',
-              SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, W, H, SDL_WINDOW_OPENGL or SDL_WINDOW_FULLSCREEN or SDL_WINDOW_RESIZABLE);
+              SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, W, H, SDL_WINDOW_OPENGL or FULLSCREEN_FLAG or SDL_WINDOW_RESIZABLE or SDL_WINDOW_ALLOW_HIGHDPI);
   end
   else
   begin
     Log.LogStatus('Set Video Mode...   Windowed', 'SDL_SetVideoMode');
     CurrentWindowMode := Mode_Windowed;
     screen := SDL_CreateWindow('UltraStar Deluxe loading...',
-              SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W, H, SDL_WINDOW_OPENGL or SDL_WINDOW_RESIZABLE or SDL_WINDOW_HIDDEN);
+              SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W, H, SDL_WINDOW_OPENGL or SDL_WINDOW_RESIZABLE or SDL_WINDOW_HIDDEN or SDL_WINDOW_ALLOW_HIGHDPI);
   end;
 
   if (screen = nil) then
@@ -787,12 +807,11 @@ NoDoubledResolution:
     end;
   end;
 
-  // define virtual (Render) and real (Screen) screen size
-  RenderW := 800;
-  RenderH := 600;
-  ScreenW := ActualW;
-  ScreenH := ActualH;
-  CalculateScreenMetrics;
+  // define real (Screen) screen size; the virtual (Render) size comes from
+  // the theme (see SetRenderSize)
+  WinW := ActualW;
+  WinH := ActualH;
+  UpdateViewMetrics;
 
 end;
 
@@ -860,12 +879,18 @@ begin
   if Mode >= Mode_Fullscreen then
   begin
     Mode := Mode and not Mode_Borderless;
+    {$IFDEF DARWIN}
+    // macOS: fullscreen on the desktop at its native resolution (a real
+    // video mode change gives a blurry, stretched picture on these displays)
+    SDL_SetWindowFullscreen(screen, SDL_WINDOW_FULLSCREEN_DESKTOP);
+    {$ELSE}
     SDL_GetWindowDisplayMode(screen, @Disp);
     SDL_SetWindowFullscreen(screen, SDL_WINDOW_FULLSCREEN);
 
     Ini.GetResolutionFullscreen(Disp.W, Disp.H);
     SDL_SetWindowDisplayMode(screen, @Disp);
     SDL_SetWindowSize(screen, Disp.W, Disp.H);
+    {$ENDIF}
   end
   else if Mode = Mode_Borderless then
   begin
@@ -877,13 +902,13 @@ begin
     WindowModeDirty := true; // set window size dirty to restore old size after switching from fullscreen
     SDL_SetWindowFullscreen(screen, 0); // calls window-resize event which updates screen sizes
 
-    ScreenW := LastW; ScreenH := LastH;
-    if not HasValidSize then Ini.GetResolution(ScreenW, ScreenH);
+    WinW := LastW; WinH := LastH;
+    if not HasValidSize then Ini.GetResolution(WinW, WinH);
     // SDL sends resize notifications asynchronously. Keep the render metrics in
     // sync now as well, otherwise the first windowed frames still use the
     // fullscreen viewport width.
-    CalculateScreenMetrics;
-    SDL_SetWindowSize(screen, ScreenW, ScreenH);
+    UpdateViewMetrics;
+    SDL_SetWindowSize(screen, WinW, WinH);
   end;
 
 end;
@@ -914,8 +939,8 @@ begin
   begin
     if not HasValidSize then
     begin
-      LastH := ScreenH;
-      LastW := ScreenW;
+      LastH := WinH;
+      LastW := WinW;
     end;
 
     // restoring from maximized state will additionally call a SDL_WINDOWEVENT_RESIZED event
@@ -930,9 +955,9 @@ begin
     end;
 
     // override render size
-    ScreenW := LastW;
-    ScreenH := LastH;
-    CalculateScreenMetrics;
+    WinW := LastW;
+    WinH := LastH;
+    UpdateViewMetrics;
     SDL_SetWindowPosition(screen, LastX, LastY);
 
     // if there wasn't a windowed mode before, center window
@@ -944,8 +969,8 @@ begin
   else
   begin
     // override render size
-    ScreenW := w; ScreenH := h;
-    CalculateScreenMetrics;
+    WinW := w; WinH := h;
+    UpdateViewMetrics;
     if (CurrentWindowMode = Mode_Windowed) and
        not HasWindowState(SDL_WINDOW_MAXIMIZED or SDL_WINDOW_FULLSCREEN) then
     begin
@@ -957,18 +982,95 @@ begin
 
   if CurrentWindowMode = Mode_Fullscreen then
   begin
-    Screen.W := ScreenW;
-    Screen.H := ScreenH;
+    Screen.W := WinW;
+    Screen.H := WinH;
   end
   else
   begin
-    SDL_SetWindowSize(screen, ScreenW, ScreenH);
+    SDL_SetWindowSize(screen, WinW, WinH);
   end;
 
   if assigned(Display) then
   begin
     Display.OnWindowResized(); // notify display window has changed
   end;
+end;
+
+{**
+ * Sets the size of the virtual canvas that themes and screens are laid out on
+ * (800x600 for the classic 4:3 themes, e.g. 1280x720 for a widescreen theme).
+ * Called when a theme is loaded, also while the game is running.
+ *}
+procedure SetRenderSize(W, H: integer; Keep: boolean);
+begin
+  if (W < 320) or (H < 240) then
+  begin
+    W := 800;
+    H := 600;
+  end;
+  RenderW := W;
+  RenderH := H;
+  KeepAspect := Keep;
+  if (WinW > 0) and (WinH > 0) and (Screens > 0) then
+    UpdateViewMetrics();
+  if Assigned(Renderer) and Assigned(screen) then
+    Renderer.SetOrthographicProjection(0, RenderW, RenderH, 0, -1, 100);
+end;
+
+{**
+ * Works out the drawn area from the window: its size in pixels (high DPI
+ * displays have more pixels than points) and, if the theme keeps its aspect
+ * ratio, the bars around it.
+ *}
+procedure UpdateViewMetrics();
+var
+  DW, DH: integer;
+  Aspect: real;
+begin
+  DW := 0;
+  DH := 0;
+  if Assigned(screen) then
+    SDL_GL_GetDrawableSize(screen, @DW, @DH);
+  if (DW <= 0) or (DH <= 0) then
+  begin
+    DW := WinW;
+    DH := WinH;
+  end;
+  if (WinW > 0) then
+    DrawScale := DW / WinW
+  else
+    DrawScale := 1;
+
+  ScreenW := DW;
+  ScreenH := DH;
+  ViewOffX := 0;
+  ViewOffY := 0;
+  if KeepAspect and (RenderH > 0) and (Screens > 0) and (DH > 0) then
+  begin
+    Aspect := RenderW * Screens / RenderH;
+    if (DW / DH > Aspect + 0.005) then
+    begin
+      ScreenW := Round(DH * Aspect);
+      ViewOffX := (DW - ScreenW) div 2;
+    end
+    else if (DW / DH < Aspect - 0.005) then
+    begin
+      ScreenH := Round(DW / Aspect);
+      ViewOffY := (DH - ScreenH) div 2;
+    end;
+  end;
+  if (Screens > 0) then
+    CalculateScreenMetrics;
+end;
+
+{**
+ * Mouse position from window points to pixels of the drawn area (what the
+ * screens expect, see e.g. TMenu.ParseMouse).
+ *}
+procedure WindowToView(var X, Y: integer);
+begin
+  X := Round(X * DrawScale) - ViewOffX;
+  Y := Round(Y * DrawScale) - ViewOffY;
 end;
 
 procedure CalculateScreenMetrics();
