@@ -319,7 +319,7 @@ begin
   X1 := 0;
   Y1 := 0;
   H := Y + 1;
-  W := 800;
+  W := RenderW;
 
   QuadList[0].X := X1;
   QuadList[0].Y := Y1;
@@ -334,9 +334,9 @@ begin
 
   // Bottom
   X1 := 0;
-  Y1 := 600;
+  Y1 := RenderH;
   H := Y + 1;
-  W := 800;
+  W := RenderW;
 
   QuadList[1].X := X1;
   QuadList[1].Y := Y1;
@@ -352,7 +352,7 @@ begin
   // Left
   X1 := 0;
   Y1 := 0;
-  H := 600;
+  H := RenderH;
   W := X + 1;
 
   QuadList[2].X := X1;
@@ -367,9 +367,9 @@ begin
   QuadList[2].Gradient := gdNone;
 
   // Right
-  X1 := 800;
+  X1 := RenderW;
   Y1 := 0;
-  H := 600;
+  H := RenderH;
   W := X + 1;
 
   QuadList[3].X := X1;

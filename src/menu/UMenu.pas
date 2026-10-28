@@ -922,6 +922,12 @@ function TMenu.AddText(ThemeText: TThemeText): integer;
 begin
   Result := AddText(ThemeText.X, ThemeText.Y, ThemeText.W, ThemeText.H, ThemeText.Font, ThemeText.Style, ThemeText.Size,
     ThemeText.ColR, ThemeText.ColG, ThemeText.ColB, ThemeText.Align, ThemeText.Text, ThemeText.Reflection, ThemeText.ReflectionSpacing, ThemeText.Z, ThemeText.Writable);
+  Text[Result].Shadow := ThemeText.Shadow;
+  if (ThemeText.MinSize > 0) then
+  begin
+    Text[Result].MinSize := ThemeText.MinSize;
+    Text[Result].Text := Text[Result].Text; // re-split with the limit
+  end;
 end;
 
 function TMenu.AddText(X, Y: real; const Text_: UTF8String): integer;
@@ -997,6 +1003,15 @@ begin
   Button[Result].SelectW := ThemeButton.SelectW;
 
   Button[Result].Fade := ThemeButton.Fade;
+  Button[Result].SelectScale := ThemeButton.SelectScale;
+  Button[Result].DeselectAlpha := ThemeButton.DAlpha;
+  Button[Result].SelectTextDX := ThemeButton.TextDX;
+  if (ThemeButton.IconTex <> '') then
+    Button[Result].SetIcon(Renderer.GetTexture(Skin.GetTextureFileName(ThemeButton.IconTex), TEXTURE_TYPE_TRANSPARENT),
+      ThemeButton.IconX, ThemeButton.IconY, ThemeButton.IconW, ThemeButton.IconH,
+      ThemeButton.IconColR, ThemeButton.IconColG, ThemeButton.IconColB,
+      ThemeButton.IconDColR, ThemeButton.IconDColG, ThemeButton.IconDColB,
+      ThemeButton.IconScale, ThemeButton.IconSpin, ThemeButton.IconWobble);
   Button[Result].FadeText := ThemeButton.FadeText;
   if (ThemeButton.Typ = TEXTURE_TYPE_COLORIZED) then
   begin
@@ -1019,6 +1034,15 @@ begin
       ThemeButton.Text[BT].ColR, ThemeButton.Text[BT].ColG, ThemeButton.Text[BT].ColB,
       ThemeButton.Text[BT].Font, ThemeButton.Text[BT].Style, ThemeButton.Text[BT].Size,
       ThemeButton.Text[BT].Align, ThemeButton.Text[BT].Text);
+    // a button text may have its own colour while the button is not selected
+    if (ThemeButton.Text[BT].DColor <> '') then
+      with Button[Result].Text[High(Button[Result].Text)] do
+      begin
+        DColR := ThemeButton.Text[BT].DColR;
+        DColG := ThemeButton.Text[BT].DColG;
+        DColB := ThemeButton.Text[BT].DColB;
+        UseDColor := true;
+      end;
   end;
 
   // button collection mod
@@ -1601,6 +1625,11 @@ begin
     Skin.GetTextureFileName(ThemeSelectS.Tex), ThemeSelectS.Typ,
     Skin.GetTextureFileName(ThemeSelectS.TexSBG), ThemeSelectS.TypSBG,
     ThemeSelectS.Text, Data);
+  SelectsS[High(SelectsS)].FontFamily := ThemeSelectS.Font;
+  SelectsS[High(SelectsS)].FontStyle := ThemeSelectS.Style;
+  SelectsS[High(SelectsS)].ArrowTint := ThemeSelectS.ArrowTint;
+  SelectsS[High(SelectsS)].Text.Font := ThemeSelectS.Font;
+  SelectsS[High(SelectsS)].Text.Style := ThemeSelectS.Style;
   for SO := 0 to High(Values) do
     AddSelectSlideOption(Values[SO]);
 
@@ -1626,6 +1655,12 @@ begin
   SelectsS[High(SelectsS)].Tex_SelectS_ArrowR.Z := ThemeSelectS.Z;
 
   SelectsS[High(SelectsS)].showArrows := ThemeSelectS.showArrows;
+  SelectsS[High(SelectsS)].UseSTUColor := ThemeSelectS.UseSTUColor;
+  SelectsS[High(SelectsS)].DAlpha := ThemeSelectS.DAlpha;
+  SelectsS[High(SelectsS)].STUColR := ThemeSelectS.STUColR;
+  SelectsS[High(SelectsS)].STUColG := ThemeSelectS.STUColG;
+  SelectsS[High(SelectsS)].STUColB := ThemeSelectS.STUColB;
+  SelectsS[High(SelectsS)].ColorSelText;
   SelectsS[High(SelectsS)].oneItemOnly := ThemeSelectS.oneItemOnly;
 
   //Generate Lines
@@ -2148,8 +2183,19 @@ begin
 
   ThemeButtonBack := Theme.OptionsSub.ButtonBack;
   ThemeButtonBack.Y := Round(ScrollArea.Y + ScrollArea.H + Theme.OptionsSub.ButtonBackVSpacing);
-  AddButton(ThemeButtonBack);
-  AddButtonText(20, 3, Theme.Options.Description[OPTIONS_DESC_INDEX_BACK]);
+  // a theme can style the back button's text (Texts = 1); otherwise it is
+  // added in white as before
+  if (Length(ThemeButtonBack.Text) > 0) then
+  begin
+    SetLength(ThemeButtonBack.Text, 1);
+    ThemeButtonBack.Text[0].Text := Theme.Options.Description[OPTIONS_DESC_INDEX_BACK];
+    AddButton(ThemeButtonBack);
+  end
+  else
+  begin
+    AddButton(ThemeButtonBack);
+    AddButtonText(20, 3, Theme.Options.Description[OPTIONS_DESC_INDEX_BACK]);
+  end;
   Interaction := 0;
 
 end;

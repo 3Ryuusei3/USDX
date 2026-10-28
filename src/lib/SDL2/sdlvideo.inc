@@ -711,6 +711,7 @@ procedure SDL_SetWindowSize(window: PSDL_Window; w: SInt32; h: SInt32) cdecl; ex
    *}
 
 procedure SDL_GetWindowSize(window: PSDL_Window; w: PInt; h: PInt) cdecl; external SDL_LibName {$IFDEF DELPHI} {$IFDEF MACOS} name '_SDL_GetWindowSize' {$ENDIF} {$ENDIF};
+procedure SDL_GL_GetDrawableSize(window: PSDL_Window; w: PInt; h: PInt) cdecl; external SDL_LibName {$IFDEF DELPHI} {$IFDEF MACOS} name '_SDL_GL_GetDrawableSize' {$ENDIF} {$ENDIF};
 
   {**
    *  \brief Get the size of a window's borders (decorations) around the client area.

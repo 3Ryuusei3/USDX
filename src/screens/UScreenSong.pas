@@ -35,6 +35,7 @@ interface
 
 uses
   UCatCovers,
+  UCoverLoader,
   UCommon,
   UDataBase,
   UDisplay,
@@ -78,6 +79,10 @@ type
       LastSelectMouse: integer;
       LastSelectTime: integer;
       LastPreviewStartTime: integer;
+      CoverWanted: array of boolean;  // covers in view (see LoadCover)
+      InfoBaseY: array of real;       // theme positions of the song details (LayoutSongInfo)
+      TextInfo: integer;              // genre, language, edition
+      ActualCoverName: string;        // cover of the big selected cover
       LastChangeSoundTime: integer;
       LastScrollStopTime: integer;
 
@@ -299,6 +304,13 @@ type
 
       procedure UnloadCover(NumberOfButtonInArray: integer);
       procedure LoadCover(NumberOfButtonInArray: integer);
+      procedure SetActualCover;
+      procedure PlayChangeSound;
+      procedure ScrollListsTo(First: boolean);
+      procedure LayoutSongInfo;
+      procedure ApplyLoadedCovers;
+      procedure CoverEvicted(const Name: string);
+      function CoverInUse(const Name: string): boolean;
 
       procedure SongScore;
 
@@ -490,7 +502,7 @@ begin
     begin
       if (TSongMenuMode(Ini.SongMenu) <> smList) then
       begin
-        AudioPlayback.PlaySound(SoundLib.Change);
+        PlayChangeSound;
         SelectNext(false);
         SetScrollRefresh;
       end
@@ -528,7 +540,7 @@ begin
     begin
       if (TSongMenuMode(Ini.SongMenu) <> smList) then
       begin
-        AudioPlayback.PlaySound(SoundLib.Change);
+        PlayChangeSound;
         SelectPrev;
         SetScrollRefresh;
       end
@@ -580,7 +592,7 @@ begin
           FixSelected;
 
           //Play Music:
-          AudioPlayback.PlaySound(SoundLib.Change);
+          PlayChangeSound;
         end;
         //Cat Change Hack End}
       end
@@ -646,7 +658,7 @@ begin
           FixSelected;
 
           //Play Music:
-          AudioPlayback.PlaySound(SoundLib.Change);
+          PlayChangeSound;
         end;
         //Cat Change Hack End}
       end
@@ -735,7 +747,7 @@ begin
               begin
                 SkipTo(CatSongs.VisibleIndex((I + Interaction) mod I2), (I + Interaction) mod I2, VS);
 
-                AudioPlayback.PlaySound(SoundLib.Change);
+                PlayChangeSound;
 
                 SetScrollRefresh;
                 //Break and Exit
@@ -770,7 +782,7 @@ begin
               begin
                 SkipTo(CatSongs.VisibleIndex((I + Interaction) mod I2), (I + Interaction) mod I2, VS);
 
-                AudioPlayback.PlaySound(SoundLib.Change);
+                PlayChangeSound;
 
                 SetScrollRefresh;
 
@@ -800,7 +812,7 @@ begin
                (UCS4UpperCase(UTF8ToUCS4String(TempStr)[0]) <> UpperLetter) then
             begin
               SkipTo(CatSongs.VisibleIndex((I + Interaction) mod I2), (I + Interaction) mod I2, VS);
-              AudioPlayback.PlaySound(SoundLib.Change);
+              PlayChangeSound;
               SetScrollRefresh;
               Exit;
             end;
@@ -818,7 +830,7 @@ begin
                (UCS4UpperCase(UTF8ToUCS4String(TempStr)[0]) <> UpperLetter) then
             begin
               SkipTo(CatSongs.VisibleIndex((I + Interaction) mod I2), (I + Interaction) mod I2, VS);
-              AudioPlayback.PlaySound(SoundLib.Change);
+              PlayChangeSound;
               SetScrollRefresh;
               Exit;
             end;
@@ -1061,7 +1073,7 @@ begin
                 Inc(NextRandomSongIdx);
               end
             end;
-            AudioPlayback.PlaySound(SoundLib.Change);
+            PlayChangeSound;
 
             SetScrollRefresh;
           end;
@@ -1755,30 +1767,61 @@ var
 begin
   inherited Create;
 
+  if (CoverLoader = nil) then
+    CoverLoader := TCoverLoader.Create(512, 240);
+  CoverLoader.OnEvict := CoverEvicted;
+  CoverLoader.InUse := CoverInUse;
+  CoverLoader.SetShape(Theme.Song.CoverSquare, Theme.Song.CoverRadius);
+
   LoadFromTheme(Theme.Song);
 
-  TextArtist := AddText(Theme.Song.TextArtist);
-  TextTitle  := AddText(Theme.Song.TextTitle);
-  TextNumber := AddText(Theme.Song.TextNumber);
-  TextYear   := AddText(Theme.Song.TextYear);
+  if (TSongMenuMode(Ini.SongMenu) = smList) and Theme.Song.HasDetail then
+  begin
+    // list mode with a detail block for the selected song
+    TextArtist := AddText(Theme.Song.DetailArtist);
+    TextTitle  := AddText(Theme.Song.DetailTitle);
+    TextNumber := AddText(Theme.Song.TextNumber);
+    TextYear   := AddText(Theme.Song.DetailYear);
+  end
+  else
+  begin
+    TextArtist := AddText(Theme.Song.TextArtist);
+    TextTitle  := AddText(Theme.Song.TextTitle);
+    TextNumber := AddText(Theme.Song.TextNumber);
+    TextYear   := AddText(Theme.Song.TextYear);
+  end;
+
+  TextInfo := AddText(Theme.Song.TextInfo);
 
   //Show Cat in Top Left mod
   TextCat := AddText(Theme.Song.TextCat);
   StaticCat :=  AddStatic(Theme.Song.StaticCat);
 
-  //Show Video Icon Mod
-  VideoIcon := AddStatic(Theme.Song.VideoIcon);
+  if (TSongMenuMode(Ini.SongMenu) = smList) and Theme.Song.HasDetail then
+  begin
+    VideoIcon := AddStatic(Theme.Song.DetailVideoIcon);
+    MedleyIcon := AddStatic(Theme.Song.DetailMedleyIcon);
+    CalcMedleyIcon := AddStatic(Theme.Song.DetailCalculatedMedleyIcon);
+    DuetIcon := AddStatic(Theme.Song.DetailDuetIcon);
+    RapIcon := AddStatic(Theme.Song.DetailRapIcon);
+    RapToFreestyleIcon := AddStatic(Theme.Song.DetailRapToFreestyleIcon);
+  end
+  else
+  begin
+    //Show Video Icon Mod
+    VideoIcon := AddStatic(Theme.Song.VideoIcon);
 
-  //Meldey Icons
-  MedleyIcon := AddStatic(Theme.Song.MedleyIcon);
-  CalcMedleyIcon := AddStatic(Theme.Song.CalculatedMedleyIcon);
+    //Meldey Icons
+    MedleyIcon := AddStatic(Theme.Song.MedleyIcon);
+    CalcMedleyIcon := AddStatic(Theme.Song.CalculatedMedleyIcon);
 
-  //Duet Icon
-  DuetIcon := AddStatic(Theme.Song.DuetIcon);
+    //Duet Icon
+    DuetIcon := AddStatic(Theme.Song.DuetIcon);
 
-  //Rap Icons
-  RapIcon := AddStatic(Theme.Song.RapIcon);
-  RapToFreestyleIcon := AddStatic(Theme.Song.RapToFreestyleIcon);
+    //Rap Icons
+    RapIcon := AddStatic(Theme.Song.RapIcon);
+    RapToFreestyleIcon := AddStatic(Theme.Song.RapToFreestyleIcon);
+  end;
 
   //Show Scores
   TextScore       := AddText(Theme.Song.TextScore);
@@ -2081,6 +2124,8 @@ begin
 
   // set length of button array once instead for every song
   SetButtonLength(Length(CatSongs.Song));
+  SetLength(CoverWanted, 0);
+  SetLength(CoverWanted, Length(CatSongs.Song));
 
   // create all buttons
   for I := 0 to High(CatSongs.Song) do
@@ -2193,6 +2238,25 @@ begin
   //basisbit todo here
 end;
 
+{ "Pop · Español · SingStar" }
+function SongInfoLine(Song: TSong): UTF8String;
+  procedure Add(const S: UTF8String);
+  begin
+    if (Trim(S) = '') or (LowerCase(Trim(S)) = 'unknown') then
+      Exit;
+    if (Result <> '') then
+      Result := Result + '  ' + UTF8Encode(WideString(WideChar($00B7))) + '  ';
+    Result := Result + Trim(S);
+  end;
+begin
+  Result := '';
+  if (Song = nil) or Song.Main then
+    Exit;
+  Add(Song.Genre);
+  Add(Song.Language);
+  Add(Song.Edition);
+end;
+
 procedure TScreenSong.SetScroll;
 var
   VS, B, SongsInCat: integer;
@@ -2230,7 +2294,7 @@ begin
       else SetListScroll;
     end;
 
-    if (TSongMenuMode(Ini.SongMenu) <> smList) then
+    if (TSongMenuMode(Ini.SongMenu) <> smList) or Theme.Song.HasDetail then
     begin
       // Set visibility of video icon
       Statics[VideoIcon].Visible := CatSongs.Song[Interaction].Video.IsSet;
@@ -2247,10 +2311,19 @@ begin
       Statics[RapToFreestyleIcon].Visible := CatSongs.Song[Interaction].hasRap and RapToFreestyle;
 
       // Set texts
-      Text[TextArtist].Size := Theme.Song.TextArtist.Size; // reset in case it was previously decreased by a too long artist
+      if (TSongMenuMode(Ini.SongMenu) = smList) and Theme.Song.HasDetail then
+      begin
+        Text[TextArtist].Size := Theme.Song.DetailArtist.Size;
+        Text[TextTitle].Size := Theme.Song.DetailTitle.Size;
+      end
+      else
+      begin
+        Text[TextArtist].Size := Theme.Song.TextArtist.Size; // reset in case it was previously decreased by a too long artist
+        Text[TextTitle].Size := Theme.Song.TextTitle.Size;
+      end;
       Text[TextArtist].Text := CatSongs.Song[Interaction].Artist;
-      Text[TextTitle].Size := Theme.Song.TextTitle.Size; // reset in case it was previously decreased by a too long title
       Text[TextTitle].Text  :=  CatSongs.Song[Interaction].Title;
+      Text[TextInfo].Text := SongInfoLine(CatSongs.Song[Interaction]);
       if ((Ini.Tabs = 0) or (TSortingType(Ini.Sorting) <> sYear))
         and (CatSongs.Song[Interaction].Year <> 0) then
           Text[TextYear].Text  :=  InttoStr(CatSongs.Song[Interaction].Year)
@@ -2383,7 +2456,9 @@ begin
       if not Interaction = 0 then Text[TextNumber].Text := Text[TextNumber].Text + '/' + IntToStr(CatSongs.Song[Interaction - CatSongs.Song[Interaction].CatNumber].CatNumber);
     end
     else
-      Text[TextNumber].Text := IntToStr(Interaction+1) + '/' + IntToStr(Length(CatSongs.Song));
+      Text[TextNumber].Text := IntToStr(Interaction+1) + ' / ' + IntToStr(Length(CatSongs.Song));
+
+    LayoutSongInfo;
   end
   else
   begin
@@ -2391,6 +2466,7 @@ begin
     Text[TextArtist].Text := '';
     Text[TextTitle].Text  := '';
     Text[TextYear].Text  := '';
+    Text[TextInfo].Text  := '';
 
     Statics[VideoIcon].Visible := false;
 
@@ -2697,11 +2773,7 @@ end;
 
 procedure TScreenSong.SetChessboardScrollRefresh;
 begin
-  Statics[StaticActual].Texture.Free;
-  if (Button[Interaction].Texture.Name.IsUnset) then
-    Statics[StaticActual].Texture := Renderer.GetTexture(Skin.GetTextureFileName('SongCover'), TEXTURE_TYPE_PLAIN)
-  else
-    Statics[StaticActual].Texture := Renderer.LoadTexture(Button[Interaction].Texture.Name);
+  SetActualCover;
 
   Statics[StaticActual].Texture.Alpha := 1;
 
@@ -2772,11 +2844,7 @@ var
   SongID: array of integer;
   Alpha: real;
 begin
-  Statics[StaticActual].Texture.Free;
-  if (Button[Interaction].Texture.Name.IsUnset) then
-    Statics[StaticActual].Texture := Renderer.GetTexture(Skin.GetTextureFileName('SongCover'), TEXTURE_TYPE_PLAIN)
-  else
-    Statics[StaticActual].Texture := Renderer.LoadTexture(Button[Interaction].Texture.Name);
+  SetActualCover;
   Statics[StaticActual].Texture.Alpha := 1;
 
   Statics[StaticActual].Texture.X := Theme.Song.Cover.SelectX;
@@ -2865,9 +2933,11 @@ begin
 
     // Set texts
     Text[ListTextArtist[I]].Alpha := Alpha;
+    Text[ListTextArtist[I]].Size := Theme.Song.TextArtist.Size; // may have been made smaller for a long one
     Text[ListTextArtist[I]].Text := CatSongs.Song[SongID[I]].Artist;
 
     Text[ListTextTitle[I]].Alpha := Alpha;
+    Text[ListTextTitle[I]].Size := Theme.Song.TextTitle.Size;
     Text[ListTextTitle[I]].Text  :=  CatSongs.Song[SongID[I]].Title;
 
     Text[ListTextYear[I]].Alpha := Alpha;
@@ -2952,9 +3022,10 @@ begin
       Statics[ListRapToFreestyleIcon[I]].Visible := false;
     end;
 
-    Text[TextArtist].Visible := false;
-    Text[TextTitle].Visible  := false;
-    Text[TextYear].Visible   := false;
+    // with a detail block (theme) the selected song is shown next to the list
+    Text[TextArtist].Visible := Theme.Song.HasDetail;
+    Text[TextTitle].Visible  := Theme.Song.HasDetail;
+    Text[TextYear].Visible   := Theme.Song.HasDetail;
     Statics[VideoIcon].Visible  := false;
     Statics[MedleyIcon].Visible := false;
     Statics[CalcMedleyIcon].Visible := false;
@@ -3140,6 +3211,7 @@ var
   Position:   real;
   I, J:       integer;
 begin
+  ApplyLoadedCovers;
 
   FadeMessage();
 
@@ -3421,8 +3493,10 @@ begin
     NextInt := (Interaction + Skip) mod Length(Interactions);
     OriginalInteraction := Interaction;
 
-    if not ((TSongMenuMode(Ini.SongMenu) in [smChessboard, smList]) and (NextInt < Interaction)) then
-      Interaction := NextInt;
+    // past the last song: back to the first one (all menus)
+    Interaction := NextInt;
+    if (NextInt < OriginalInteraction) then
+      ScrollListsTo(true);
 
     if (Interaction <> OriginalInteraction) then
       SongTarget := SongTarget + 1;//Skip;
@@ -3437,7 +3511,7 @@ begin
    // if ((TSongMenuMode(Ini.SongMenu) in [smList]) and (NextInt = 0)) then
    //   SongCurrent := -1;
 
-    if (not onlyFix) then
+    if (not onlyFix) and (Interaction > OriginalInteraction) then
     begin
       if (TSongMenuMode(Ini.SongMenu) = smChessboard) then
       begin
@@ -3474,13 +3548,15 @@ begin
     PrevInt := (Interaction - Skip + Length(Interactions)) mod Length(Interactions);
     OriginalInteraction := Interaction;
 
-    if not ((TSongMenuMode(Ini.SongMenu) in [smChessboard, smList]) and (PrevInt > Interaction)) then
-      Interaction := PrevInt;
+    // before the first song: on to the last one (all menus)
+    Interaction := PrevInt;
+    if (PrevInt > OriginalInteraction) then
+      ScrollListsTo(false);
 
     if (Interaction <> OriginalInteraction) then
       SongTarget := SongTarget - 1;
 
-    if (TSongMenuMode(Ini.SongMenu) = smChessboard) then
+    if (TSongMenuMode(Ini.SongMenu) = smChessboard) and (Interaction < OriginalInteraction) then
     begin
       if (not Button[Interaction].Visible) then
         ChessboardMinLine := ChessboardMinLine - 1;
@@ -3495,6 +3571,29 @@ begin
   end;
 end;
 
+{ after jumping from one end of the songs to the other: show that end in the
+  chessboard and the list }
+procedure TScreenSong.ScrollListsTo(First: boolean);
+var
+  VS: integer;
+  MaxLine: integer;
+begin
+  VS := CatSongs.VisibleSongs;
+  if First then
+  begin
+    ChessboardMinLine := 0;
+    ListMinLine := 0;
+  end
+  else
+  begin
+    MaxLine := 0;
+    if (Theme.Song.Cover.Cols > 0) and (VS > Theme.Song.Cover.Cols * Theme.Song.Cover.Rows) then
+      MaxLine := (VS - Theme.Song.Cover.Cols * Theme.Song.Cover.Rows + Theme.Song.Cover.Cols - 1) div Theme.Song.Cover.Cols;
+    ChessboardMinLine := MaxLine;
+    ListMinLine := Max(0, VS - Theme.Song.ListCover.Rows);
+  end;
+end;
+
 procedure TScreenSong.SelectNextRow;
 var
   Skip, SongIndex: integer;
@@ -3504,11 +3603,7 @@ var
 begin
   VS := CatSongs.VisibleSongs;
 
-  if (SDL_GetTicks - LastChangeSoundTime >= CHANGE_SOUND_THROTTLE_MS) then
-  begin
-    AudioPlayback.PlaySound(SoundLib.Change);
-    LastChangeSoundTime := SDL_GetTicks;
-  end;
+  PlayChangeSound;
 
   if VS > 0 then
   begin
@@ -3535,7 +3630,14 @@ begin
 
     if (Skip <= Theme.Song.Cover.Cols) then
     begin
-      Interaction := LastVisibleSongIndex;
+      // last row: to the end, and from the end back to the first song
+      if (Interaction = LastVisibleSongIndex) then
+      begin
+        Interaction := FirstVisibleSongIndex;
+        ScrollListsTo(true);
+      end
+      else
+        Interaction := LastVisibleSongIndex;
     end
     else
     begin
@@ -3546,7 +3648,7 @@ begin
     if (Interaction <> OriginalInteraction) then
       SongTarget := SongTarget + 1;
 
-    if (not Button[Interaction].Visible) then
+    if (Interaction > OriginalInteraction) and (not Button[Interaction].Visible) then
     begin
       ChessboardMinLine := ChessboardMinLine + 1;
 
@@ -3568,13 +3670,10 @@ var
   VS:   integer;
   OriginalInteraction: integer;
 begin
+  OriginalInteraction := Interaction;
   VS := CatSongs.VisibleSongs;
 
-  if (SDL_GetTicks - LastChangeSoundTime >= CHANGE_SOUND_THROTTLE_MS) then
-  begin
-    AudioPlayback.PlaySound(SoundLib.Change);
-    LastChangeSoundTime := SDL_GetTicks;
-  end;
+  PlayChangeSound;
 
   if (VS > 0) then
   begin
@@ -3601,7 +3700,14 @@ begin
 
     if (Skip <= Theme.Song.Cover.Cols) then
     begin
-      Interaction := FirstVisibleSongIndex;
+      // first row: to the start, and from the start on to the last song
+      if (Interaction = FirstVisibleSongIndex) then
+      begin
+        Interaction := LastVisibleSongIndex;
+        ScrollListsTo(false);
+      end
+      else
+        Interaction := FirstVisibleSongIndex;
     end
     else
     begin
@@ -3614,7 +3720,7 @@ begin
 
   end;
 
-  if (not Button[Interaction].Visible) then
+  if (Interaction < OriginalInteraction) and (not Button[Interaction].Visible) then
   begin
     ChessboardMinLine := ChessboardMinLine - 1;
     if (ChessboardMinLine < 0) then
@@ -3623,11 +3729,14 @@ begin
 end;
 
 procedure TScreenSong.SelectNextListRow;
+var
+  Orig: integer;
 begin
-  AudioPlayback.PlaySound(SoundLib.Change);
+  PlayChangeSound;
+  Orig := Interaction;
   SelectNext;
 
-  if (not Button[Interaction].Visible) then
+  if (Interaction > Orig) and (not Button[Interaction].Visible) then
   begin
     if ListMinLine + Theme.Song.ListCover.Rows < CatSongs.VisibleSongs then
       ListMinLine := ListMinLine + 1;
@@ -3635,11 +3744,14 @@ begin
 end;
 
 procedure TScreenSong.SelectPrevListRow;
+var
+  Orig: integer;
 begin
-  AudioPlayback.PlaySound(SoundLib.Change);
+  PlayChangeSound;
+  Orig := Interaction;
   SelectPrev;
 
-  if (not Button[Interaction].Visible) then
+  if (Interaction < Orig) and (not Button[Interaction].Visible) then
   begin
     if ListMinLine > 0 then
       ListMinLine := ListMinLine - 1;
@@ -4022,7 +4134,7 @@ begin
         end;
   end;
 
-  AudioPlayback.PlaySound(SoundLib.Change);
+  PlayChangeSound;
   SetScroll;
 end;
 
@@ -4244,6 +4356,8 @@ end;
 //Detailed Cover Unloading. Unloads the Detailed, uncached Cover of the Song Button
 procedure TScreenSong.UnloadCover(NumberOfButtonInArray: integer);
 begin
+  if (NumberOfButtonInArray < Length(CoverWanted)) then
+    CoverWanted[NumberOfButtonInArray] := false;
   // background texture (garbage disposal)
   if ((not Button[NumberOfButtonInArray].Texture.IsEmpty) and (Button[NumberOfButtonInArray].Texture.Name <> Skin.GetTextureFileName('SongCover'))) then
     Button[NumberOfButtonInArray].Texture.Release();
@@ -4252,14 +4366,211 @@ end;
 //Detailled Cover Loading. Loads the Detailed, uncached Cover of the Song Button
 procedure TScreenSong.LoadCover(NumberOfButtonInArray: integer);
 var
-  Tex: TTexture;
+  Tex, Old: TTexture;
 begin
+  if (NumberOfButtonInArray < Length(CoverWanted)) then
+    CoverWanted[NumberOfButtonInArray] := true;
   If (Button[NumberOfButtonInArray].Texture.IsEmpty) and Assigned(Button[NumberOfButtonInArray].Texture.Name) then
   begin
-    Tex := Renderer.LoadTexture(Button[NumberOfButtonInArray].Texture.Name);
-    Button[NumberOfButtonInArray].Texture.Free;
+    // from the cover cache; if not there yet it is loaded in the background
+    // and put in place by ApplyLoadedCovers
+    Tex := CoverLoader.Get(Button[NumberOfButtonInArray].Texture.Name);
+    if (Tex = nil) then
+      Exit;
+    Old := Button[NumberOfButtonInArray].Texture;
+    Tex.X := Old.X;
+    Tex.Y := Old.Y;
+    Tex.Z := Old.Z;
+    Tex.W := Old.W;
+    Tex.H := Old.H;
+    Tex.Alpha := Old.Alpha;
+    Tex.Int := Old.Int;
+    Tex.ColR := Old.ColR;
+    Tex.ColG := Old.ColG;
+    Tex.ColB := Old.ColB;
+    Tex.Reflection := Old.Reflection;
+    Tex.ReflectionSpacing := Old.ReflectionSpacing;
+    Old.Free;
     Button[NumberOfButtonInArray].Texture := Tex;
   end;
+end;
+
+{ places the details of the selected song: the shown icons one after the
+  other (theme: Song...Icons Flow), and everything below the title moved
+  down when the title takes two lines }
+procedure TScreenSong.LayoutSongInfo;
+var
+  Icons: array [0..5] of cardinal;
+  Below: array of integer;      // statics below the title
+  BelowT: array of integer;     // texts below the title
+  I, N, Visible: integer;
+  X, Total, Shift: real;
+begin
+  Icons[0] := VideoIcon;
+  Icons[1] := MedleyIcon;
+  Icons[2] := CalcMedleyIcon;
+  Icons[3] := DuetIcon;
+  Icons[4] := RapIcon;
+  Icons[5] := RapToFreestyleIcon;
+
+  SetLength(Below, 11);
+  for I := 0 to 5 do
+    Below[I] := Icons[I];
+  Below[6] := Static2PlayersDuetSingerP1;
+  Below[7] := Static2PlayersDuetSingerP2;
+  Below[8] := Static3PlayersDuetSingerP1;
+  Below[9] := Static3PlayersDuetSingerP2;
+  Below[10] := Static3PlayersDuetSingerP3;
+  SetLength(BelowT, 8);
+  BelowT[7] := TextInfo;
+  BelowT[0] := TextArtist;
+  BelowT[1] := TextYear;
+  BelowT[2] := Text2PlayersDuetSingerP1;
+  BelowT[3] := Text2PlayersDuetSingerP2;
+  BelowT[4] := Text3PlayersDuetSingerP1;
+  BelowT[5] := Text3PlayersDuetSingerP2;
+  BelowT[6] := Text3PlayersDuetSingerP3;
+
+  // remember the theme positions once
+  if (Length(InfoBaseY) = 0) then
+  begin
+    SetLength(InfoBaseY, Length(Below) + Length(BelowT));
+    for I := 0 to High(Below) do
+      InfoBaseY[I] := Statics[Below[I]].Texture.Y;
+    for I := 0 to High(BelowT) do
+      InfoBaseY[Length(Below) + I] := Text[BelowT[I]].Y;
+  end;
+
+  // second line of the title
+  Shift := 0;
+  if (Text[TextTitle].LineCount > 1) then
+    Shift := (Text[TextTitle].LineCount - 1) * Text[TextTitle].Size;
+  for I := 0 to High(Below) do
+    Statics[Below[I]].Texture.Y := InfoBaseY[I] + Shift;
+  for I := 0 to High(BelowT) do
+    Text[BelowT[I]].Y := InfoBaseY[Length(Below) + I] + Shift;
+
+  // icons in a row
+  if (Theme.Song.IconFlow > 0) then
+  begin
+    Total := 0;
+    Visible := 0;
+    for I := 0 to 5 do
+      if Statics[Icons[I]].Visible then
+      begin
+        Total := Total + Statics[Icons[I]].Texture.W;
+        Inc(Visible);
+      end;
+    if (Visible > 1) then
+      Total := Total + (Visible - 1) * Theme.Song.IconGap;
+    if (Theme.Song.IconFlow = 2) then
+      X := Theme.Song.VideoIcon.X - Total / 2
+    else if (TSongMenuMode(Ini.SongMenu) = smList) and Theme.Song.HasDetail then
+      X := Theme.Song.DetailVideoIcon.X
+    else
+      X := Theme.Song.VideoIcon.X;
+    for I := 0 to 5 do
+      if Statics[Icons[I]].Visible then
+      begin
+        Statics[Icons[I]].Texture.X := X;
+        X := X + Statics[Icons[I]].Texture.W + Theme.Song.IconGap;
+      end;
+  end;
+end;
+
+{ the "change" sound: when a key is held down only on the first move, not on
+  every repeat (the repeats came irregularly and sounded out of step) }
+procedure TScreenSong.PlayChangeSound;
+begin
+  if KeyIsRepeat then
+    Exit;
+  AudioPlayback.PlaySound(SoundLib.Change);
+  LastChangeSoundTime := SDL_GetTicks;
+end;
+
+{ big cover of the selected song (chessboard and list) }
+procedure TScreenSong.SetActualCover;
+var
+  Tex: TTexture;
+  Name: IPath;
+begin
+  Statics[StaticActual].Texture.Free;
+  Tex := nil;
+  if (Interaction >= 0) and (Interaction <= High(Button)) then
+  begin
+    Name := Button[Interaction].Texture.Name;
+    if Name.IsUnset then
+      Name := Skin.GetTextureFileName('SongCover');
+    Tex := CoverLoader.Get(Name);
+    ActualCoverName := Name.ToNative;
+  end;
+  if (Tex = nil) then
+    Tex := Renderer.CreateEmptyTexture(PATH_NONE);
+  Statics[StaticActual].Texture := Tex;
+end;
+
+{ puts covers that finished loading where they are wanted }
+procedure TScreenSong.ApplyLoadedCovers;
+var
+  B: integer;
+  Old: TTexture;
+  GX, GY, GZ, GW, GH, GA: single;
+begin
+  if not CoverLoader.Poll then
+    Exit;
+  for B := 0 to Min(High(Button), High(CoverWanted)) do
+    if CoverWanted[B] and Button[B].Texture.IsEmpty and Assigned(Button[B].Texture.Name) and
+       CoverLoader.IsCached(Button[B].Texture.Name) then
+      LoadCover(B);
+  if (ActualCoverName <> '') and Statics[StaticActual].Texture.IsEmpty and
+     CoverLoader.IsCached(Path(ActualCoverName)) then
+  begin
+    Old := Statics[StaticActual].Texture;
+    GX := Old.X; GY := Old.Y; GZ := Old.Z; GW := Old.W; GH := Old.H; GA := Old.Alpha;
+    SetActualCover; // frees Old
+    Statics[StaticActual].Texture.X := GX;
+    Statics[StaticActual].Texture.Y := GY;
+    Statics[StaticActual].Texture.Z := GZ;
+    Statics[StaticActual].Texture.W := GW;
+    Statics[StaticActual].Texture.H := GH;
+    Statics[StaticActual].Texture.Alpha := GA;
+  end;
+end;
+
+function TScreenSong.CoverInUse(const Name: string): boolean;
+var
+  B: integer;
+begin
+  Result := (Name = ActualCoverName);
+  if Result then
+    Exit;
+  for B := 0 to Min(High(Button), High(CoverWanted)) do
+    if CoverWanted[B] and Assigned(Button[B].Texture.Name) and (Button[B].Texture.Name.ToNative = Name) then
+    begin
+      Result := true;
+      Exit;
+    end;
+end;
+
+{ a cached cover is freed: drop the clones of it }
+procedure TScreenSong.CoverEvicted(const Name: string);
+var
+  B: integer;
+  Old: TTexture;
+begin
+  for B := 0 to High(Button) do
+    if Assigned(Button[B].Texture.Name) and (not Button[B].Texture.IsEmpty) and
+       (Button[B].Texture.Name.ToNative = Name) then
+    begin
+      Old := Button[B].Texture;
+      Button[B].Texture := Renderer.CreateEmptyTexture(Old.Name);
+      Button[B].Texture.X := Old.X;
+      Button[B].Texture.Y := Old.Y;
+      Button[B].Texture.Z := Old.Z;
+      Button[B].Texture.W := Old.W;
+      Button[B].Texture.H := Old.H;
+      Old.Free;
+    end;
 end;
 
 procedure TScreenSong.Refresh;
