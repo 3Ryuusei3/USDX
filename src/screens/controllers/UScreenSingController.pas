@@ -40,6 +40,7 @@ uses
   UGraphicClasses,
   UHookableEvent,
   UIni,
+  UPassMic,
   ULyrics,
   UMenu,
   UMusic,
@@ -1319,6 +1320,7 @@ begin
         Inc(NumEmptySentences[0]);
   end;
 
+  PassMic.Prepare(ScreenSong.Mode <> smMedley);
   eSongLoaded.CallHookChain(False);
 
   if (ScreenSong.Mode = smMedley) and (PlaylistMedley.CurrentMedleySong>1) then

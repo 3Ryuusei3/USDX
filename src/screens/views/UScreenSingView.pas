@@ -41,6 +41,7 @@ uses
   UGraphicClasses,
   UHookableEvent,
   UIni,
+  UPassMic,
   ULog,
   ULyrics,
   UAvatars,
@@ -993,6 +994,9 @@ begin
           ScreenSing.UpdateMedleyStats(medley_start_applause);
 
         Party.CallOnSing;
+
+        if (Ini.PassMic = 1) then
+          PassMic.Draw(LyricsState.GetCurrentTime());
       end;
     end
     else
