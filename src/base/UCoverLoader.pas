@@ -101,6 +101,7 @@ implementation
 
 uses
   Math,
+  ULog,
   UImage;
 
 const
@@ -180,23 +181,32 @@ begin
     fBusy := Name;
     SDL_UnlockMutex(fLock);
 
-    Surface := LoadImage(Path(Name));
-    if (Surface <> nil) then
-    begin
-      if fSquare and (Surface.W <> Surface.H) then
-        Shape(Surface);
-      if (Max(Surface.W, Surface.H) > fMaxSize) then
+    Surface := nil;
+    try
+      Surface := LoadImage(Path(Name));
+      if (Surface <> nil) then
       begin
-        Scale := Max(Surface.W, Surface.H) / fMaxSize;
-        ScaleImage(Surface, Max(1, Floor(Surface.W / Scale)), Max(1, Floor(Surface.H / Scale)));
+        if fSquare and (Surface.W <> Surface.H) then
+          Shape(Surface);
+        if (Max(Surface.W, Surface.H) > fMaxSize) then
+        begin
+          Scale := Max(Surface.W, Surface.H) / fMaxSize;
+          ScaleImage(Surface, Max(1, Floor(Surface.W / Scale)), Max(1, Floor(Surface.H / Scale)));
+        end;
+        if (fRadius > 0) then
+        begin
+          AdjustPixelFormat(Surface, TEXTURE_TYPE_TRANSPARENT);
+          RoundCorners(Surface, fRadius);
+        end
+        else
+          AdjustPixelFormat(Surface, TEXTURE_TYPE_PLAIN);
       end;
-      if (fRadius > 0) then
+    except
+      on E: Exception do
       begin
-        AdjustPixelFormat(Surface, TEXTURE_TYPE_TRANSPARENT);
-        RoundCorners(Surface, fRadius);
-      end
-      else
-        AdjustPixelFormat(Surface, TEXTURE_TYPE_PLAIN);
+        Log.LogError('Cover ' + Name + ': ' + E.Message, 'TCoverLoader.Run');
+        Surface := nil;
+      end;
     end;
 
     SDL_LockMutex(fLock);
