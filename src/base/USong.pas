@@ -73,7 +73,7 @@ type
   TSingMode = ( smNormal, smPartyClassic, smPartyFree, smPartyTournament, smJukebox, smPlaylistRandom , smMedley );
   TSongMode = ( smAll, smCategory, smPlaylist);
 
-  TMedleySource = ( msNone, msCalculated, msTag );
+  TMedleySource = ( msNone, msCalculated, msTag, msRandom ); // msRandom: random range, rolled again on every analysis
 
   TMedley = record
     Source:       TMedleySource;  //source of the information
@@ -184,7 +184,7 @@ type
     Encoding:   TEncoding;
     PreviewStart: real;   // in seconds
     HasPreview: boolean;  // set if a valid PreviewStart was read
-    CalcMedley: boolean;  // if true => do not calc medley for that song
+    CalcMedley: boolean;  // if false => no automatic medley range (refrain / drawing lots) for that song
     Medley:     TMedley;  // medley params
 
     isDuet: boolean;
@@ -220,6 +220,7 @@ type
     function    LoadSong(DuetChange: boolean): boolean;
     function    Analyse(const ReadCustomTags: Boolean = false; DuetChange: boolean = false; RapToFreestyle: boolean = false; OutOfBoundsToFreestyle: boolean = false; AudioLength: real = 0; ForceLoadNotes: boolean = false): boolean;
     procedure   GetPreviewRange(AudioLength: real; out PreviewStartPos, PreviewEndPos: real);
+    function    HasSingableNotes(): boolean; // at least one scored (non freestyle) note
     procedure   SetMedleyMode();
     procedure   Clear();
     function    MD5SongFile(SongFileR: TTextFileStream): string;
@@ -1381,7 +1382,7 @@ begin
     end;
 
     // MedleyStartBeat
-    if TagMapTryGetData('MEDLEYSTARTBEAT', Value) and not self.Relative then
+    if TagMapTryGetData('MEDLEYSTARTBEAT', Value) then
     begin
       RemoveTagsFromTagMap('MEDLEYSTARTBEAT');
       if TryStrtoInt(Value, self.Medley.StartBeat) then
@@ -1389,7 +1390,7 @@ begin
     end;
 
     // MedleyEndBeat
-    if TagMapTryGetData('MEDLEYENDBEAT', Value) and not self.Relative then
+    if TagMapTryGetData('MEDLEYENDBEAT', Value) then
     begin
       RemoveTagsFromTagMap('MEDLEYENDBEAT');
       if TryStrtoInt(Value, self.Medley.EndBeat) then
@@ -1397,7 +1398,7 @@ begin
     end;
 
     // Medley
-    if (TagMapTryGetData('CALCMEDLEY', Value)) then
+    if TagMapTryGetData('CALCMEDLEY', Value) then
     begin
       RemoveTagsFromTagMap('CALCMEDLEY');
       if Uppercase(Value) = 'OFF' then
@@ -1690,14 +1691,41 @@ begin
   Tracks[LineNumberP].Lines[Tracks[LineNumberP].High].LastLine := false;
 end;
 
+function TSong.HasSingableNotes(): boolean;
+var
+  TrackIndex, LineIndex, NoteIndex: integer;
+begin
+  Result := false;
+  for TrackIndex := 0 to High(Tracks) do
+    for LineIndex := 0 to High(Tracks[TrackIndex].Lines) do
+      for NoteIndex := 0 to High(Tracks[TrackIndex].Lines[LineIndex].Notes) do
+        if Tracks[TrackIndex].Lines[LineIndex].Notes[NoteIndex].NoteType <> ntFreestyle then
+        begin
+          Result := true;
+          Exit;
+        end;
+end;
+
 {* new procedure for preview
    tries find out the beginning of a refrain
    and the end... *}
 procedure TSong.FindRefrain();
 Const
   MEDLEY_MIN_DURATION = 40;   //minimum duration of a medley-song in seconds
+  MEDLEY_RANDOM_MIN = 20;     //random range: shortest target duration in seconds
+  MEDLEY_RANDOM_MAX = 30;     //random range: longest target duration in seconds
+  MEDLEY_RANDOM_FLOOR = 12;   //random range: shorter windows (end of the song) are discarded
+  MEDLEY_RANDOM_NOTES = 5;    //random range: scored notes needed in the window
+  MEDLEY_RANDOM_EDGE = 0.1;   //random range: avoid the first and last 10% of the song
 
 Type
+  TPhrase = record
+    Track:     integer; //track the line belongs to
+    StartBeat: integer; //first scored note of the line
+    EndBeat:   integer; //end of the last scored note of the line
+    Notes:     integer; //number of scored notes
+  end;
+
   TSeries = record
     start:    integer; //Start sentence of series
     end_:     integer; //End sentence of series
@@ -1705,133 +1733,398 @@ Type
   end;
 
 var
-  I, J, K, num_lines:   integer;
-  sentences:            array of UTF8String;
-  series:               array of TSeries;
-  temp_series:          TSeries;
-  max:                  integer;
-  len_lines, len_notes: integer;
-  found_end:            boolean;
+  TrackIndex:           integer;
+  BestStartBeat:        integer;
+  BestEndBeat:          integer;
+  BestSeriesLength:     integer;
+  CandidateStartBeat:   integer;
+  CandidateEndBeat:     integer;
+  CandidateSeriesLength: integer;
+  FoundMedley:          boolean;
+
+  procedure SetMedleyRange(StartBeat, EndBeat: integer; Source: TMedleySource);
+  begin
+    self.Medley.StartBeat := StartBeat;
+    self.Medley.EndBeat := EndBeat;
+    self.Medley.Source := Source;
+    self.Medley.FadeIn_time := DEFAULT_FADE_IN_TIME;
+    self.Medley.FadeOut_time := DEFAULT_FADE_OUT_TIME;
+  end;
+
+  function ExtendMedleyRange(TrackIndex, StartBeat, CandidateEndBeat: integer; MinDuration: real; out EndBeat: integer): boolean;
+  var
+    LineIndex, NoteIndex: integer;
+    NoteEnd: integer;
+    TargetTime: real;
+  begin
+    EndBeat := CandidateEndBeat;
+    Result := false;
+
+    if (TrackIndex < 0) or (TrackIndex > High(Tracks)) then
+      Exit;
+
+    if self.BPM < MIN_BPM then
+    begin
+      Result := EndBeat > StartBeat;
+      Exit;
+    end;
+
+    TargetTime := GetTimeFromBeat(StartBeat, self) + MinDuration;
+    for LineIndex := 0 to High(Tracks[TrackIndex].Lines) do
+    begin
+      for NoteIndex := 0 to High(Tracks[TrackIndex].Lines[LineIndex].Notes) do
+      begin
+        if Tracks[TrackIndex].Lines[LineIndex].Notes[NoteIndex].StartBeat < StartBeat then
+          Continue;
+
+        NoteEnd := Tracks[TrackIndex].Lines[LineIndex].Notes[NoteIndex].StartBeat +
+          Tracks[TrackIndex].Lines[LineIndex].Notes[NoteIndex].Duration;
+        if NoteEnd > EndBeat then
+          EndBeat := NoteEnd;
+      end;
+
+      // checked per line, so the range always ends on a line boundary
+      if GetTimeFromBeat(EndBeat, self) >= TargetTime then
+      begin
+        Result := true;
+        Exit;
+      end;
+    end;
+
+    // the song ends before the minimum duration: take what there is
+    Result := EndBeat > StartBeat;
+  end;
+
+  // Draws a range of MEDLEY_RANDOM_MIN..MEDLEY_RANDOM_MAX seconds that starts at
+  // the beginning of a line and ends at the end of a line. Windows with enough
+  // scored notes are preferred, away from the intro and the outro. In a duet,
+  // the window must have notes for both singers, as balanced as possible.
+  function PickRandomMedley(out StartBeat, EndBeat: integer): boolean;
+  var
+    Phrases:   array of TPhrase;
+    Phrase:    TPhrase;
+    I, J, K:   integer;
+    TrackIdx, LineIdx, NoteIdx: integer;
+    Count:     integer;
+    NoteType:  TNoteType;
+    NoteStart, NoteEnd, Scored: integer;
+    FirstBeat, LastBeat: integer;
+    TargetSec: real;
+    S, E:      integer;
+    Changed:   boolean;
+    Notes:     array of integer;
+    MinN, MaxN: integer;
+    Tier, Key, BestKey: integer;
+    SpanBeats: integer;
+    Picked:    integer;
+    CandStart, CandEnd: array of integer;
+    CandKey:   array of integer;
+    NumCands:  integer;
+  begin
+    Result := false;
+    StartBeat := 0;
+    EndBeat := 0;
+
+    // one phrase per line that has scored notes
+    Count := 0;
+    for TrackIdx := 0 to High(Tracks) do
+      for LineIdx := 0 to High(Tracks[TrackIdx].Lines) do
+      begin
+        Scored := 0;
+        Phrase.Track := TrackIdx;
+        Phrase.StartBeat := High(integer);
+        Phrase.EndBeat := Low(integer);
+        for NoteIdx := 0 to High(Tracks[TrackIdx].Lines[LineIdx].Notes) do
+        begin
+          NoteType := Tracks[TrackIdx].Lines[LineIdx].Notes[NoteIdx].NoteType;
+          if NoteType = ntFreestyle then
+            Continue;
+          NoteStart := Tracks[TrackIdx].Lines[LineIdx].Notes[NoteIdx].StartBeat;
+          NoteEnd := NoteStart + Tracks[TrackIdx].Lines[LineIdx].Notes[NoteIdx].Duration;
+          if NoteStart < Phrase.StartBeat then
+            Phrase.StartBeat := NoteStart;
+          if NoteEnd > Phrase.EndBeat then
+            Phrase.EndBeat := NoteEnd;
+          Inc(Scored);
+        end;
+        if Scored = 0 then
+          Continue;
+        Phrase.Notes := Scored;
+        SetLength(Phrases, Count + 1);
+        Phrases[Count] := Phrase;
+        Inc(Count);
+      end;
+
+    if Count = 0 then
+      Exit;
+
+    // sort by start beat (insertion sort, a song has a few hundred lines at most)
+    for I := 1 to Count - 1 do
+    begin
+      Phrase := Phrases[I];
+      J := I - 1;
+      while (J >= 0) and (Phrases[J].StartBeat > Phrase.StartBeat) do
+      begin
+        Phrases[J + 1] := Phrases[J];
+        Dec(J);
+      end;
+      Phrases[J + 1] := Phrase;
+    end;
+
+    FirstBeat := Phrases[0].StartBeat;
+    LastBeat := FirstBeat;
+    for I := 0 to Count - 1 do
+      if Phrases[I].EndBeat > LastBeat then
+        LastBeat := Phrases[I].EndBeat;
+    SpanBeats := LastBeat - FirstBeat;
+
+    // invalid BPM: no way to measure seconds, take the whole singable part
+    if self.BPM < MIN_BPM then
+    begin
+      StartBeat := FirstBeat;
+      EndBeat := LastBeat;
+      Result := EndBeat > StartBeat;
+      Exit;
+    end;
+
+    TargetSec := MEDLEY_RANDOM_MIN + Random * (MEDLEY_RANDOM_MAX - MEDLEY_RANDOM_MIN);
+    SetLength(Notes, Length(Tracks));
+    SetLength(CandStart, Count);
+    SetLength(CandEnd, Count);
+    SetLength(CandKey, Count);
+    NumCands := 0;
+    BestKey := -1;
+
+    for I := 0 to Count - 1 do
+    begin
+      S := Phrases[I].StartBeat;
+
+      // end at the end of the line that crosses the target duration
+      E := S;
+      for J := I to Count - 1 do
+      begin
+        if Phrases[J].EndBeat > E then
+          E := Phrases[J].EndBeat;
+        if GetTimeFromBeat(E, self) - GetTimeFromBeat(S, self) >= TargetSec then
+          Break;
+      end;
+
+      if GetTimeFromBeat(E, self) - GetTimeFromBeat(S, self) < MEDLEY_RANDOM_FLOOR then
+        Continue;
+
+      // do not cut the lines of the other singer in half (duets)
+      repeat
+        Changed := false;
+        for J := 0 to Count - 1 do
+          if (Phrases[J].StartBeat >= S) and (Phrases[J].StartBeat < E) and (Phrases[J].EndBeat > E) then
+          begin
+            E := Phrases[J].EndBeat;
+            Changed := true;
+          end;
+      until not Changed;
+
+      for K := 0 to High(Notes) do
+        Notes[K] := 0;
+      for J := 0 to Count - 1 do
+        if (Phrases[J].StartBeat >= S) and (Phrases[J].EndBeat <= E) then
+          Inc(Notes[Phrases[J].Track], Phrases[J].Notes);
+
+      MinN := Notes[0];
+      MaxN := Notes[0];
+      for K := 1 to High(Notes) do
+      begin
+        if Notes[K] < MinN then MinN := Notes[K];
+        if Notes[K] > MaxN then MaxN := Notes[K];
+      end;
+
+      if Length(Tracks) < 2 then
+      begin
+        if MaxN < MEDLEY_RANDOM_NOTES then
+          Continue;
+        Tier := 1;
+      end
+      else
+      begin
+        // 3: both singers with similar amounts, 2: both singers, 1: any notes
+        if (MinN >= 3) and (MinN * 5 >= MaxN * 2) then
+          Tier := 3
+        else if MinN >= 1 then
+          Tier := 2
+        else if MaxN >= MEDLEY_RANDOM_NOTES then
+          Tier := 1
+        else
+          Continue;
+      end;
+
+      Key := Tier * 2;
+      if (S >= FirstBeat + Round(SpanBeats * MEDLEY_RANDOM_EDGE)) and
+         (E <= LastBeat - Round(SpanBeats * MEDLEY_RANDOM_EDGE)) then
+        Inc(Key);
+
+      CandStart[NumCands] := S;
+      CandEnd[NumCands] := E;
+      CandKey[NumCands] := Key;
+      Inc(NumCands);
+      if Key > BestKey then
+        BestKey := Key;
+    end;
+
+    if NumCands = 0 then
+    begin
+      // nothing met the criteria: the whole singable part is better than no medley
+      StartBeat := FirstBeat;
+      EndBeat := LastBeat;
+      Result := EndBeat > StartBeat;
+      Exit;
+    end;
+
+    // draw among the best candidates
+    Picked := Random(NumCands);
+    for I := 0 to NumCands - 1 do
+    begin
+      J := (Picked + I) mod NumCands;
+      if CandKey[J] = BestKey then
+      begin
+        StartBeat := CandStart[J];
+        EndBeat := CandEnd[J];
+        Result := true;
+        Exit;
+      end;
+    end;
+  end;
+
+  function TryCalculatedMedley(TrackIndex: integer; out StartBeat, EndBeat, SeriesLength: integer): boolean;
+  var
+    I, J, K, NumLines: integer;
+    Sentences: array of UTF8String;
+    Series: array of TSeries;
+    TempSeries: TSeries;
+    MaxSeries: integer;
+    MaxOffset: integer;
+    LenNotes: integer;
+    CandidateStart: integer;
+    CandidateEnd: integer;
+  begin
+    Result := false;
+    StartBeat := 0;
+    EndBeat := 0;
+    SeriesLength := 0;
+
+    if (TrackIndex < 0) or (TrackIndex > High(Tracks)) then
+      Exit;
+
+    NumLines := Length(Tracks[TrackIndex].Lines);
+    if NumLines = 0 then
+      Exit;
+
+    SetLength(Sentences, NumLines);
+
+    //build sentences array
+    for I := 0 to NumLines - 1 do
+    begin
+      Sentences[I] := '';
+      for J := 0 to High(Tracks[TrackIndex].Lines[I].Notes) do
+      begin
+        if (Tracks[TrackIndex].Lines[I].Notes[J].NoteType <> ntFreestyle) then
+          Sentences[I] := Sentences[I] + Tracks[TrackIndex].Lines[I].Notes[J].Text;
+      end;
+    end;
+
+    //find equal sentences series
+    SetLength(Series, 0);
+
+    for I := 0 to NumLines - 2 do
+    begin
+      for J := I + 1 to NumLines - 1 do
+      begin
+        if (Sentences[I] <> '') and (Sentences[I] = Sentences[J]) then
+        begin
+          TempSeries.start := I;
+          TempSeries.end_  := I;
+
+          if (J + J - I - 1 > NumLines - 1) then
+            MaxOffset := NumLines - 1 - J
+          else
+            MaxOffset := J - I - 1;
+
+          for K := 1 to MaxOffset do
+          begin
+            if Sentences[I+K] = Sentences[J+K] then
+              TempSeries.end_ := I+K
+            else
+              break;
+          end;
+          TempSeries.len := TempSeries.end_ - TempSeries.start + 1;
+          SetLength(Series, Length(Series)+1);
+          Series[Length(Series)-1] := TempSeries;
+        end;
+      end;
+    end;
+
+    //search for longest sequence
+    MaxSeries := 0;
+    if Length(Series) > 0 then
+    begin
+      for I := 0 to High(Series) do
+      begin
+        if Series[I].len > Series[MaxSeries].len then
+          MaxSeries := I;
+      end;
+    end;
+
+    if (Length(Series) > 0) and (Series[MaxSeries].len > 3) then
+    begin
+      LenNotes := length(Tracks[TrackIndex].Lines[Series[MaxSeries].end_].Notes);
+      if (length(Tracks[TrackIndex].Lines[Series[MaxSeries].start].Notes) > 0) and (LenNotes > 0) then
+      begin
+        CandidateStart := Tracks[TrackIndex].Lines[Series[MaxSeries].start].Notes[0].StartBeat;
+        CandidateEnd := Tracks[TrackIndex].Lines[Series[MaxSeries].end_].Notes[LenNotes - 1].StartBeat +
+          Tracks[TrackIndex].Lines[Series[MaxSeries].end_].Notes[LenNotes - 1].Duration;
+
+        if ExtendMedleyRange(TrackIndex, CandidateStart, CandidateEnd, MEDLEY_MIN_DURATION, CandidateEnd) then
+        begin
+          StartBeat := CandidateStart;
+          EndBeat := CandidateEnd;
+          SeriesLength := Series[MaxSeries].len;
+          Result := true;
+        end;
+      end;
+    end;
+  end;
 begin
   if self.Medley.Source = msTag then
     Exit;
 
-  if not self.CalcMedley then
+  if Length(Tracks) = 0 then
     Exit;
 
-  //relative is not supported for medley!
-  if self.Relative then
-  begin
-    Log.LogError('Song '+self.Artist+'-' + self.Title + ' contains #Relative, this is not supported by medley-function!');
-    self.Medley.Source := msNone;
-    Exit;
-  end;
+  FoundMedley := false;
+  BestSeriesLength := 0;
 
-  num_lines := Length(Tracks[0].Lines);
-  SetLength(sentences, num_lines);
-
-  //build sentences array
-  for I := 0 to num_lines - 1 do
+  // repeated section, unless the song asks for no automatic medley
+  if self.CalcMedley then
   begin
-    sentences[I] := '';
-    for J := 0 to High(Tracks[0].Lines[I].Notes) do
+    for TrackIndex := 0 to High(Tracks) do
     begin
-      if (Tracks[0].Lines[I].Notes[J].NoteType <> ntFreestyle) then
-        sentences[I] := sentences[I] + Tracks[0].Lines[I].Notes[J].Text;
-    end;
-  end;
-
-  //find equal sentences series
-  SetLength(series, 0);
-
-  for I := 0 to num_lines - 2 do
-  begin
-    for J := I + 1 to num_lines - 1 do
-    begin
-      if sentences[I] = sentences[J] then
+      if TryCalculatedMedley(TrackIndex, CandidateStartBeat, CandidateEndBeat, CandidateSeriesLength) then
       begin
-        temp_series.start := I;
-        temp_series.end_  := I;
-
-        if (J + J - I - 1 > num_lines - 1) then
-          max:=num_lines-1-J
-        else
-          max:=J-I-1;
-
-        for K := 1 to max do
+        if (not FoundMedley) or (CandidateSeriesLength > BestSeriesLength) then
         begin
-          if sentences[I+K] = sentences[J+K] then
-            temp_series.end_ := I+K
-          else
-            break;
-        end;
-        temp_series.len := temp_series.end_ - temp_series.start + 1;
-        SetLength(series, Length(series)+1);
-        series[Length(series)-1] := temp_series;
-      end;
-    end;
-  end;
-
-  //search for longest sequence
-  max := 0;
-  if Length(series) > 0 then
-  begin
-    for I := 0 to High(series) do
-    begin
-      if series[I].len > series[max].len then
-        max := I;
-    end;
-  end;
-
-  len_lines := length(Tracks[0].Lines);
-
-  if (Length(series) > 0) and (series[max].len > 3) then
-  begin
-    self.Medley.StartBeat := Tracks[0].Lines[series[max].start].Notes[0].StartBeat;
-    len_notes := length(Tracks[0].Lines[series[max].end_].Notes);
-    self.Medley.EndBeat := Tracks[0].Lines[series[max].end_].Notes[len_notes - 1].StartBeat +
-      Tracks[0].Lines[series[max].end_].Notes[len_notes - 1].Duration;
-
-    found_end := false;
-
-    //set end if duration > MEDLEY_MIN_DURATION
-    if GetTimeFromBeat(self.Medley.StartBeat, self) + MEDLEY_MIN_DURATION >
-      GetTimeFromBeat(self.Medley.EndBeat, self) then
-    begin
-      found_end := true;
-    end;
-
-    //estimate the end: just go MEDLEY_MIN_DURATION
-    //ahead an set to a line end (if possible)
-    if not found_end then
-    begin
-      for I := series[max].start + 1 to len_lines - 1 do
-      begin
-        len_notes := length(Tracks[0].Lines[I].Notes);
-        for J := 0 to len_notes - 1 do
-        begin
-          if GetTimeFromBeat(self.Medley.StartBeat, self) + MEDLEY_MIN_DURATION >
-            GetTimeFromBeat(Tracks[0].Lines[I].Notes[J].StartBeat +
-            Tracks[0].Lines[I].Notes[J].Duration, self) then
-          begin
-            found_end := true;
-            self.Medley.EndBeat := Tracks[0].Lines[I].Notes[len_notes-1].StartBeat +
-              Tracks[0].Lines[I].Notes[len_notes - 1].Duration;
-            break;
-          end;
+          BestStartBeat := CandidateStartBeat;
+          BestEndBeat := CandidateEndBeat;
+          BestSeriesLength := CandidateSeriesLength;
+          FoundMedley := true;
         end;
       end;
     end;
-
-    if found_end then
-    begin
-      self.Medley.Source := msCalculated;
-
-      //calculate fade time
-      self.Medley.FadeIn_time := DEFAULT_FADE_IN_TIME;
-      self.Medley.FadeOut_time := DEFAULT_FADE_OUT_TIME;
-    end;
   end;
+
+  if FoundMedley then
+    SetMedleyRange(BestStartBeat, BestEndBeat, msCalculated)
+  else if PickRandomMedley(BestStartBeat, BestEndBeat) then
+    SetMedleyRange(BestStartBeat, BestEndBeat, msRandom)
+  else
+    Exit;
 
   //set PreviewStart if not set
   if self.PreviewStart = 0 then
@@ -1996,13 +2289,7 @@ begin
     end;
 
     if Result and NotesLoaded then
-    begin
-      //Medley and Duet - is it possible? Perhaps later...
-      if not Self.isDuet then
-        Self.FindRefrain()
-      else
-        Self.Medley.Source := msNone;
-    end;
+      Self.FindRefrain();
   except
     Log.LogError('Reading headers from file failed. File incomplete or not Ultrastar txt?: ' + FileNamePath.ToUTF8(true));
   end;

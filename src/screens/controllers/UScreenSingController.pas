@@ -1107,7 +1107,7 @@ begin
       Exit;
     end;
 
-    if Length(CurrentSong.Tracks[0].Lines) = 0 then
+    if not CurrentSong.HasSingableNotes then
     begin
       SongError();
       Exit;
@@ -1139,7 +1139,7 @@ begin
 
     //medley start and end timestamps
     StartNote := FindNote(CurrentSong.Medley.StartBeat - round(CurrentSong.BPM*CurrentSong.Medley.FadeIn_time/60));
-    MedleyStart := GetTimeFromBeat(CurrentSong.Tracks[0].Lines[StartNote.line].Notes[0].StartBeat);
+    MedleyStart := GetTimeFromBeat(CurrentSong.Tracks[StartNote.track].Lines[StartNote.line].Notes[0].StartBeat);
 
     //check Medley-Start
     if (MedleyStart+CurrentSong.Medley.FadeIn_time*0.5>GetTimeFromBeat(CurrentSong.Medley.StartBeat)) then
