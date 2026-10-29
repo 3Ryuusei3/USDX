@@ -443,7 +443,7 @@ const
 
   IJukeboxSongMenu: array[0..1] of UTF8String = ('Off', 'On');
 
-  IColor:         array[0..8] of UTF8String = ('Blue', 'Green', 'Pink', 'Red', 'Violet', 'Orange', 'Yellow', 'Brown', 'Black');
+  IColor:         array[0..9] of UTF8String = ('Blue', 'Green', 'Pink', 'Red', 'Violet', 'Orange', 'Yellow', 'Brown', 'Black', 'Flame');
 
   // Advanced
   ILoadAnimation: array[0..1] of UTF8String = ('Off', 'On');
@@ -534,7 +534,7 @@ var
   ILyricsStyleTranslated:      array[0..2] of UTF8String = ('Regular', 'Bold', 'Outline');
   ILyricsEffectTranslated:     array[0..4] of UTF8String = ('Simple', 'Zoom', 'Slide', 'Ball', 'Shift');
   INoteLinesTranslated:        array[0..1] of UTF8String = ('Off', 'On');
-  IColorTranslated:            array[0..8] of UTF8String = ('Blue', 'Green', 'Pink', 'Red', 'Violet', 'Orange', 'Yellow', 'Brown', 'Black');
+  IColorTranslated:            array[0..9] of UTF8String = ('Blue', 'Green', 'Pink', 'Red', 'Violet', 'Orange', 'Yellow', 'Brown', 'Black', 'Flame');
   IPlayerColorTranslated:      array[0..15] of UTF8String = ('Blue', 'Red', 'Green', 'Yellow', 'Orange', 'Pink',  'Violet', 'Brown', 'Gray', 'Dark Blue', 'Sky', 'Cyan', 'Flame', 'Orchid', 'Harlequin', 'Lime');
 
   // for lyric colors
@@ -853,6 +853,7 @@ begin
   IColorTranslated[6] := ULanguage.Language.Translate('OPTION_VALUE_YELLOW');
   IColorTranslated[7] := ULanguage.Language.Translate('OPTION_VALUE_BROWN');
   IColorTranslated[8] := ULanguage.Language.Translate('OPTION_VALUE_BLACK');
+  IColorTranslated[9] := ULanguage.Language.Translate('OPTION_VALUE_FLAME');
 
   IPlayerColorTranslated[0] := ULanguage.Language.Translate('OPTION_VALUE_BLUE');
   IPlayerColorTranslated[1] := ULanguage.Language.Translate('OPTION_VALUE_RED');

@@ -274,6 +274,7 @@ type
     UseSTUColor:                          boolean;
     Font, Style:                          integer; // of the label and the values (default 0, regular)
     ArrowTint:                            boolean; // the arrows take the colour of the value text
+    ArrowInset:                           integer; // distance of the arrows from the edges of the value box
     SkipX:    integer;
   end;
 
@@ -628,6 +629,8 @@ type
       NameBoxFixed: integer;                // > 0: the box keeps the theme's size (only the text colour adapts)
       HudAlpha: real;
       LanePad3: integer;                    // side room of the 3-row veils
+      Duet3Lyrics: boolean;                 // duets with 3+ players: both lyrics side by side in the lower bar
+      Guide3Offset: integer;                // guide lines of 3 rows start this far over the baseline (-1: classic)
       MissScale: real;                      // height of sung notes that miss the tone
     end;
 
@@ -2490,6 +2493,8 @@ begin
     NameBoxFixed := ReadInteger(SectionList, 'NameBoxFixed', 0);
     HudAlpha     := ReadFloat(SectionList, 'HudAlpha', 0);
     LanePad3     := ReadInteger(SectionList, 'LanePad3', 16);
+    Guide3Offset := ReadInteger(SectionList, 'Guide3Offset', -1);
+    Duet3Lyrics  := ReadBool(SectionList, 'Duet3Lyrics', false);
     MissScale    := ReadFloat(SectionList, 'MissScale', 0.65);
   end;
   SectionList := GetSectionList('SingLineBonus');
@@ -3021,6 +3026,7 @@ begin
   ThemeSelectS.Font := ReadInteger(SectionList, 'Font', 0);
   ThemeSelectS.Style := ReadInteger(SectionList, 'Style', 0);
   ThemeSelectS.ArrowTint := ReadBool(SectionList, 'ArrowTint', false);
+  ThemeSelectS.ArrowInset := ReadInteger(SectionList, 'ArrowInset', 0);
   LoadColor(ThemeSelectS.STUColR, ThemeSelectS.STUColG, ThemeSelectS.STUColB, ReadString(SectionList, 'STUColor', ''));
 
   ThemeSelectS.showArrows := ReadBool(SectionList, 'ShowArrows', false);
@@ -3107,6 +3113,65 @@ begin
   ThemeLoadPosition(ThemeSingPlayer.Oscilloscope, 'Sing' + Name + 'Oscilloscope');
 end;
 
+{ replaces Accent, AccentText and OnAccent, if the theme has them }
+procedure ApplyAccentColor(Accent: TRGB);
+var
+  C, BgIdx, TxtIdx: integer;
+  Text: TRGB;
+
+  function Index(const Name: string): integer;
+  var
+    I: integer;
+  begin
+    Result := -1;
+    for I := 0 to High(Color) do
+      if (Color[I].Name = Name) then
+        Exit(I);
+  end;
+
+  function Luminance(const C: TRGB): real;
+  begin
+    Result := 0.2126 * C.R + 0.7152 * C.G + 0.0722 * C.B;
+  end;
+
+begin
+  C := Index('Accent');
+  if (C < 0) then
+    Exit;
+
+  Color[C].RGB := Accent;
+
+  // text in the accent colour must read over the skin's surfaces: darker
+  // over a light skin
+  TxtIdx := Index('AccentText');
+  BgIdx := Index('Bg');
+  if (TxtIdx >= 0) then
+  begin
+    Text := Accent;
+    if (BgIdx >= 0) and (Luminance(Color[BgIdx].RGB) > 0.5) then
+    begin
+      Text.R := Text.R * 0.55;
+      Text.G := Text.G * 0.55;
+      Text.B := Text.B * 0.55;
+    end;
+    Color[TxtIdx].RGB := Text;
+  end;
+
+  // what is written over the accent: dark ink, white over dark colours
+  C := Index('OnAccent');
+  if (C >= 0) then
+  begin
+    if (Luminance(Accent) < 0.35) then
+    begin
+      Color[C].RGB.R := 1; Color[C].RGB.G := 1; Color[C].RGB.B := 1;
+    end
+    else
+    begin
+      Color[C].RGB.R := 14/255; Color[C].RGB.G := 15/255; Color[C].RGB.B := 18/255;
+    end;
+  end;
+end;
+
 procedure TTheme.LoadColors;
 var
   SL:     TStringList;
@@ -3145,6 +3210,11 @@ begin
 
     Color[C].RGB.B := StrToInt(S)/255;
   end;
+
+  // Karaoke: the colour chosen in the options replaces the skin's accent
+  // (the last one, Flame, keeps the accent the skin was designed with)
+  if (Skin.Color < High(IColorTranslated)) then
+    ApplyAccentColor(GetSystemColor(Skin.Color));
 
   // skin color
   SetLength(Color, SL.Count + 3);
@@ -3389,6 +3459,12 @@ begin
           Result.R := 0;
           Result.G := 0;
           Result.B := 0;
+        end;
+    9:  begin
+          // flame: the accent the Karaoke skins are designed with
+          Result.R := 255/255;
+          Result.G := 90/255;
+          Result.B := 54/255;
         end;
     else
         begin

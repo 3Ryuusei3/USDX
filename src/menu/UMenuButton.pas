@@ -136,6 +136,8 @@ type
       procedure SetH(Value: single);
 
       procedure SetSelect(Value: boolean); virtual;
+      { jumps to the final look of the current state, without easing }
+      procedure SnapAnimation;
       property Z: single read GetZ write SetZ;
       property W: single read GetW write SetW;
       property H: single read GetH write SetH;
@@ -325,6 +327,26 @@ end;
 
 const
   BUTTON_ANIM_MS = 140;
+
+procedure TButton.SnapAnimation;
+begin
+  AnimStart := 0;
+  SelLastTick := 0;
+  SelProg := Ord(SelectBool);
+  if not Colorized then
+  begin
+    if SelectBool then
+    begin
+      Texture.ColR := SelectColR; Texture.ColG := SelectColG; Texture.ColB := SelectColB;
+      Texture.Int := SelectInt;
+    end
+    else
+    begin
+      Texture.ColR := DeselectColR; Texture.ColG := DeselectColG; Texture.ColB := DeselectColB;
+      Texture.Int := DeselectInt;
+    end;
+  end;
+end;
 
 procedure TButton.UpdateColorAnim;
 var

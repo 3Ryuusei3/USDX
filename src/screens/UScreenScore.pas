@@ -1596,6 +1596,16 @@ begin
 
   RaiseStep     := EaseOut_Step;
 
+  // themes with instant bars show the rating at once, without the elastic
+  // zoom in and out
+  if Theme.Score.InstantBars then
+  begin
+    aPlayerScoreScreenRatings[PlayerNumber].RateEaseValue := MaxVal;
+    FinishScreenDraw := true;
+    Result := MaxVal;
+    Exit;
+  end;
+
   if (MaxVal > 0) and (RaiseStep > 0) then
     RaiseStep := RaiseStep / MaxVal;
 

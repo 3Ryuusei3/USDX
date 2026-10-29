@@ -662,8 +662,8 @@ procedure TScreenName.DrawCards;
 const
   ANIM_MS = 220;
 var
-  Count, Rows, I, Col, Row, S: integer;
-  CW, CH, CX, CY, SegW, T, E, X, Y, W, H: real;
+  Count, Rows, I, Col, Row, S, UsedCols: integer;
+  CW, CH, CX, CY, SegW, T, E, X, Y, W, H, GridX: real;
   Tex: TTexture;
   Ring, Circle, Card, Seg, Track: TTexture;
   R, G, B: real;
@@ -722,17 +722,26 @@ begin
       CardsOpened := Now;
 
     Count := UIni.IPlayersVals[CountIndex];
-    Rows := (Count + Cols - 1) div Cols;
+    // 4 players make a 2 x 2 grid (centred); the cards keep the width they
+    // have with the theme's columns
+    UsedCols := Cols;
+    if (Count = 4) and (Cols > 2) then
+      UsedCols := 2;
+    Rows := (Count + UsedCols - 1) div UsedCols;
     CW := (W - Gap * (Cols - 1)) / Cols;
+    GridX := X + (W - (UsedCols * CW + (UsedCols - 1) * Gap)) / 2;
     CH := (H - Gap * (Rows - 1)) / Rows;
     if (CH > MaxH) then
       CH := MaxH;
 
     for I := 0 to Count - 1 do
     begin
-      Col := I mod Cols;
-      Row := I div Cols;
-      CX := X + Col * (CW + Gap);
+      Col := I mod UsedCols;
+      Row := I div UsedCols;
+      if (UsedCols = Cols) then
+        CX := X + Col * (CW + Gap)
+      else
+        CX := GridX + Col * (CW + Gap);
       CY := Y + Row * (CH + Gap);
 
       // entrance: the cards rise in one after the other

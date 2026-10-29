@@ -121,6 +121,9 @@ type
       // interaction
       procedure AddInteraction(Typ, Num: integer);
       procedure SetInteraction(Num: integer); virtual;
+      { buttons and select slides jump to their final look (a screen that is
+        rebuilt in place must not replay the easing from zero) }
+      procedure SnapAnimations;
       property Interaction: integer read SelInteraction write SetInteraction;
 
       // procedure load bg, texts, statics and button collections from themebasic
@@ -327,6 +330,16 @@ begin
   Interactions[IntNum].Typ := Typ;
   Interactions[IntNum].Num := Num;
   Interaction := 0;
+end;
+
+procedure TMenu.SnapAnimations;
+var
+  I: integer;
+begin
+  for I := 0 to High(Button) do
+    Button[I].SnapAnimation;
+  for I := 0 to High(SelectsS) do
+    SelectsS[I].SnapAnimation;
 end;
 
 procedure TMenu.SetInteraction(Num: integer);
@@ -1628,6 +1641,7 @@ begin
   SelectsS[High(SelectsS)].FontFamily := ThemeSelectS.Font;
   SelectsS[High(SelectsS)].FontStyle := ThemeSelectS.Style;
   SelectsS[High(SelectsS)].ArrowTint := ThemeSelectS.ArrowTint;
+  SelectsS[High(SelectsS)].ArrowInset := ThemeSelectS.ArrowInset;
   SelectsS[High(SelectsS)].Text.Font := ThemeSelectS.Font;
   SelectsS[High(SelectsS)].Text.Style := ThemeSelectS.Style;
   for SO := 0 to High(Values) do

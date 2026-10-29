@@ -363,7 +363,7 @@ class Builder:
             bg_file = "K_bg_%s.png" % file
             gradient_bg(p).save(os.path.join(OUT_DIR, bg_file))
             ini = Ini()
-            ini.set("Skin", OrderedDict([("Theme", "Karaoke"), ("Name", display), ("Color", "Black"),
+            ini.set("Skin", OrderedDict([("Theme", "Karaoke"), ("Name", display), ("Color", "Flame"),
                                          ("Creator", "Karaoke")]))
             tex = OrderedDict(self.skin_tex)
             tex["K_bg"] = bg_file
