@@ -170,6 +170,7 @@ upstream/master -> master                (identical to upstream, nothing of ours
       |-> translations                   spanish-translations (PR #1468) + one commit with the other languages
       |-> seek-keys-cmd-mac-pr           PR #1470 (seek with Cmd on macOS)
       |-> medley-all-songs               medley for every song (personal, not sent upstream)
+      |-> pass-the-mic                   "Pasar el micro" option (UPassMic, personal)
                   `-> develop = master + a merge of every branch above
 ```
 
@@ -184,7 +185,9 @@ upstream/master -> master                (identical to upstream, nothing of ours
   why `translations` is stacked on `spanish-translations`).
 - **`develop` is only merges.** Never develop on it. After changing a topic branch
   or updating `master`, merge the branches into `develop` again (order: redesign,
-  video-decode-thread, seek-keys-cmd-mac-pr, translations, medley-all-songs).
+  video-decode-thread, seek-keys-cmd-mac-pr, translations, medley-all-songs,
+  pass-the-mic). Both `redesign` and `pass-the-mic` add a line to the `uses` list of
+  `src/ultrastardx.dpr`: keep both lines.
   `rerere` is on. The only recurring conflicts are in `game/languages/*.ini`
   between `redesign` (`;TODO:` placeholders) and `translations`: keep the
   translated lines.
@@ -192,9 +195,6 @@ upstream/master -> master                (identical to upstream, nothing of ours
   (`bash ~/Downloads/Karaoke/actualizar-karaoke.sh ~/Downloads/Karaoke/USDX`).
   The fork's default branch should be `develop` so friends see the full version.
 - New personal work: branch off `master`, then merge it into `develop`.
-- Pass-the-mic ("Pasar el micro", `src/base/UPassMic.pas`) still lives only in the
-  git stash "pass-the-mic (para team-duel-normal-mode)". It needs its own branch
-  from `master`, a commit, and a merge into `develop`.
 - Medley details: random range of 20-30 s per start when there is no tag or
   repeated refrain (`msRandom`), duets need both singers, `#CALCMEDLEY:OFF`
   only disables the automatic ranges, Shift+F removes the last song.
