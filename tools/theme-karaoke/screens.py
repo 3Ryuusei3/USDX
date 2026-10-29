@@ -900,6 +900,54 @@ def options_sub(b):
     s.footer([("ButtonNavi", "Navegar"), ("ButtonEsc", "Atrás")])
 
 
+def highscores(b):
+    """Top-N screen of a song. The game lays the rows out by itself between
+    HighScoresRowNameText.Y and [HighScoresListArea] BottomY (text size
+    shrinks with the number of entries), so only the first row is given."""
+    ini, a = b.ini, b.assets
+    s = Screen(b, "HighScores")
+    s.header(["Puntuaciones"])
+    ini.set("HighScoresTextWhereAmI", text_section("", -600, -100, 1, "Text"))   # the crumb already says it
+    ini.set("HighScoresTextTitle", text_section("SING_HIGH_SCORES_TITLE", M, 92, 40, "Text", font=FONT_DISPLAY,
+                                                style=BOLD))
+    artist = text_section("artist - title", M, 146, 20, "Text2", w=W - 2 * M - 280)
+    artist["MinSize"] = "15"
+    ini.set("HighScoresTextArtistTitle", artist)
+    # difficulty: small label over the value, on the right
+    ini.set("HighScoresTextDifficultyLabel", text_section("SING_OPTIONS_GAME_DIFFICULTY", W - M, 98, 14, "Text3",
+                                                          align=2))
+    ini.set("HighScoresTextDifficulty", text_section("easy", W - M, 116, 26, "Accent", font=FONT_DISPLAY,
+                                                     style=BOLD, align=2))
+
+    # list card (static 1)
+    top, bottom = 196, 600
+    s.panel(M, top, W - 2 * M, bottom - top, r=18, color="Surface")
+    ini.set("HighScoresListArea", od(BottomY=bottom - 4, MinTextSize=16, DefaultEntries=5, MaxEntries=20))
+
+    # a row: number chip, name, score and date (the game repeats it per entry)
+    y0, size, chip = 176, 26, 36
+    cx = M + 28
+    ini.set("HighScoresRowNumberStatic", od(Tex=a.panel(chip, chip, 12), X=cx, Y=y0 - 3, W=chip, H=chip,
+                                            Color="Surface3", Type="Transparent"))
+    ini.set("HighScoresRowNumberText", text_section("1", cx + chip // 2, y0 + 4, 18, "Text", font=FONT_MONO,
+                                                    style=BOLD, align=1))
+    ini.set("HighScoresRowNameText", text_section("Player", cx + chip + 20, y0, size, "Text"))
+    ini.set("HighScoresRowScoreText", text_section("0", W - M - 28 - 150, y0, size, "Text", font=FONT_MONO,
+                                                   align=2))
+    ini.set("HighScoresRowDateText", text_section("", W - M - 28, y0 + 6, 18, "Text3", align=2))
+
+    # legend: the labels are the theme's own texts (translated by the game)
+    s.panel(0, FOOT_Y, W, 1, r=0, color="Divider")
+    x = M
+    for static_tex, key, name in (("ButtonEnter", "SING_HIGH_SCORES_CONTINUE", "HighScoresTextContinue"),
+                                  ("ButtonNavi", "SING_HIGH_SCORES_NAVIGATE", "HighScoresTextNavigate")):
+        kw = b.key_w.get(static_tex, 40)
+        s.static(x, FOOT_Y + 20, kw, 24, static_tex, color="Text2", z=0.96)
+        ini.set(name, od(X=x + kw + 10, Y=FOOT_Y + 21, Z=0.96, Text=key, Size=16, Color="Text2", Font=FONT_INTER,
+                         Style=REGULAR, Align=0))
+        x += kw + 10 + int(len(tr(key)) * 8.4) + 30
+
+
 # ---------------------------------------------------------------------------
 # Other screens (party, statistics, editor, about...): the content keeps the
 # layout of the base theme; title, legend and chrome follow the theme
@@ -1241,6 +1289,7 @@ def build(b):
     score(b)
     options(b)
     options_sub(b)
+    highscores(b)
     for prefix in GENERIC:
         generic_page(b, prefix)
     party_rows(b)
