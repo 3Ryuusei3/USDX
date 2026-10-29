@@ -152,6 +152,7 @@ type
       ShowScores:     integer;
       ShowWebScore:   integer;
       Debug:          integer;
+      PassMic:        integer; // pass the mic during the song
       AVDelay:        integer;
       MicDelay:       integer;
 
@@ -352,6 +353,7 @@ var
 const
   IDifficulty:  array[0..2] of UTF8String = ('Easy', 'Medium', 'Hard');
   ITabs:        array[0..1] of UTF8String = ('Off', 'On');
+  IPassMic:     array[0..1] of UTF8String = ('Off', 'On');
 
 const
   ISorting:      array[0..10] of UTF8String = ('Edition', 'Genre', 'Language', 'Folder', 'Title', 'Artist', 'Artist2', 'Year', 'Year Reversed', 'Decade', 'Playlist');
@@ -486,6 +488,7 @@ var
 
   IDifficultyTranslated:       array[0..2] of UTF8String  = ('Easy', 'Medium', 'Hard');
   ITabsTranslated:             array[0..1] of UTF8String  = ('Off', 'On');
+  IPassMicTranslated:          array[0..1] of UTF8String  = ('Off', 'On');
 
   ISongMenuTranslated:         array[0..2] of UTF8String  = ('Roulette', 'Chessboard', 'List');
 
@@ -687,6 +690,8 @@ begin
 
   ITabsTranslated[0]                  := ULanguage.Language.Translate('OPTION_VALUE_OFF');
   ITabsTranslated[1]                  := ULanguage.Language.Translate('OPTION_VALUE_ON');
+  IPassMicTranslated[0]               := ULanguage.Language.Translate('OPTION_VALUE_OFF');
+  IPassMicTranslated[1]               := ULanguage.Language.Translate('OPTION_VALUE_ON');
 
   ISongMenuTranslated[0]              := ULanguage.Language.Translate('OPTION_VALUE_ROULETTE');
   ISongMenuTranslated[1]              := ULanguage.Language.Translate('OPTION_VALUE_CHESSBOARD');
@@ -1564,6 +1569,9 @@ begin
   TabsAtStartup := Tabs;	//Tabs at Startup fix
 
   // Song Sorting
+  // Pass the mic
+  PassMic := ReadArrayIndex(IPassMic, IniFile, 'Game', 'PassMic', 0);
+
   Sorting := ReadArrayIndex(ISorting, IniFile, 'Game', 'Sorting', Ord(sArtist));
 
   // Show Score
@@ -1891,6 +1899,9 @@ begin
     IniFile.WriteString('Game', 'Tabs', ITabs[Tabs]);
 
     // SongMenu
+    // Pass the mic
+    IniFile.WriteString('Game', 'PassMic', IPassMic[PassMic]);
+
     IniFile.WriteString('Game', 'SongMenu', ISongMenuMode[Ord(SongMenu)]);
 
     // Sorting

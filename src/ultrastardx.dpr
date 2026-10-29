@@ -205,6 +205,7 @@ uses
   UJoystick         in 'base\UJoystick.pas',
   UDataBase         in 'base\UDataBase.pas',
   UCatCovers        in 'base\UCatCovers.pas',
+  UPassMic          in 'base\UPassMic.pas',
   UFiles            in 'base\UFiles.pas',
   UGraphicClasses   in 'base\UGraphicClasses.pas',
   UPlaylist         in 'base\UPlaylist.pas',
