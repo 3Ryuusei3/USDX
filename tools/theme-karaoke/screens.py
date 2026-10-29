@@ -571,11 +571,17 @@ def sing(b):
     # every note carries its own dark + light ring (see assets.notes)
     lines_top = [t + 10 for t in LANES]
     base = [lt + 7 * LS for lt in lines_top]
+    # three rows (3 players, or 6 in two columns): the same row as with two
+    # players (name row + staff) with a smaller staff
+    LS3 = 12
+    ROW3_Y0, ROW3_PITCH = 60, 170
+    lane3 = [ROW3_Y0 + k * ROW3_PITCH + PILL_H for k in range(3)]
+    base3 = [t + 10 + 7 * LS3 for t in lane3]
     ini.set("SingNoteArea", od(
-        Left=LANE_X + 24, Right=LANE_X + LANE_W - 24, LineSpacing=LS, LineSpacing3=12,
-        Top3Rows1=236, Top3Rows2=376, Top3Rows3=516, LanePad3=20,
+        Left=LANE_X + 24, Right=LANE_X + LANE_W - 24, LineSpacing=LS, LineSpacing3=LS3,
+        Top3Rows1=base3[0], Top3Rows2=base3[1], Top3Rows3=base3[2], LanePad3=24, Guide3Offset=7 * LS3, Duet3Lyrics=1,
         Top1Row=base[1], Top2Rows1=base[0], Top2Rows2=base[1],
-        Left3=184, Right3=W - 184, NoteScale=1.4, NoteCapScale=2, MissScale=0.8,
+        Left3=LANE_X + 24, Right3=LANE_X + LANE_W - 24, NoteScale=1.4, NoteCapScale=2, MissScale=0.8,
         LineColor="ScrimText", LineAlpha=0.18,
         LaneTex=a.panel(LANE_W, LANE_H, 20), LaneLeft=LANE_X, LaneRight=LANE_X + LANE_W,
         LanePadTop=10, LanePadBottom=LANE_H - 9 * LS - 10, LaneColor="Scrim", LaneAlpha=0,
@@ -593,12 +599,13 @@ def sing(b):
 
     GAP = 8
     PILL_W, SCORE_W = 112, 50
-    L = LANE_X + 24                          # left end of the row: the oscilloscope
-    RN = LANE_X + LANE_W - 24                # right end of the row (the pill ends here)
-    PX = RN - PILL_W                         # pill
-    SX = PX - GAP - SCORE_W                  # score and bar
+    L0 = LANE_X + 24                         # left end of a full width row: the oscilloscope
+    RN0 = LANE_X + LANE_W - 24               # right end of the row (the pill ends here)
+    MID = (L0 + RN0) // 2
 
-    def player(prefix, lane_top, color):
+    def player(prefix, lane_top, color, L=L0, RN=RN0):
+        PX = RN - PILL_W                     # pill
+        SX = PX - GAP - SCORE_W              # score and bar
         top = lane_top - PILL_H
         ini.set("Sing%sStatic" % prefix, od(X=PX, Y=top + 2, W=PILL_W, H=28, Tex=a.pill(PILL_W, 28),
                                             Color=color, Type="Transparent", Alpha=1))
@@ -611,11 +618,30 @@ def sing(b):
         ini.set("Sing%sTextScore" % prefix, od(Text="00000", X=SX, Y=top + 5, Font=FONT_MONO, Style=BOLD,
                                                Size=22, Color="ScrimText", Align=0, Shadow=3))
         ini.set("Sing%sSingBar" % prefix, od(X=SX, Y=top + 29, W=SCORE_W, H=4))
-        ini.set("Sing%sOscilloscope" % prefix, od(X=L, Y=top + 4, W=120, H=24))
+        ini.set("Sing%sOscilloscope" % prefix, od(X=L, Y=top + 4, W=120 if RN - L > 700 else 96, H=24))
 
     player("P1", LANES[1], "P1Dark")          # one player: lower lane, next to the lyrics
     player("P1TwoP", LANES[0], "P1Dark")
     player("P2R", LANES[1], "P2Dark")
+
+    # 3 players: three full width rows. 4: two columns of two rows (the
+    # staffs of the two players). 6: two columns of three rows. The engine
+    # places the notes the same way (UDraw), so the order is: left column
+    # from top to bottom, then the right one.
+    LEFT = dict(L=L0, RN=MID - 24)           # column cells: a gap in the middle
+    RIGHT = dict(L=MID + 10, RN=RN0)
+    for n, (pre, duet) in enumerate((("P1ThreeP", "DuetP1ThreeP"), ("P2M", "DuetP2M"), ("P3R", "DuetP3R"))):
+        player(pre, lane3[n], "P%dDark" % (n + 1))
+        player(duet, lane3[n], "P%dDark" % (n + 1))
+    for n, (pre, duet) in enumerate((("P1FourP", "P1DuetFourP"), ("P2FourP", "P2DuetFourP"),
+                                     ("P3FourP", "P3DuetFourP"), ("P4FourP", "P4DuetFourP"))):
+        player(pre, LANES[n % 2], "P%dDark" % (n + 1), **(LEFT if n < 2 else RIGHT))
+        player(duet, LANES[n % 2], "P%dDark" % (n + 1), **(LEFT if n < 2 else RIGHT))
+    # the game reads the bar of the 3rd player of 3 as SingP3SingBar (not P3R)
+    ini.set("SingP3SingBar", od(X=RN0 - 170, Y=lane3[2] - PILL_H + 29, W=SCORE_W, H=4))
+    for n in range(6):
+        for pre in ("P%dSixP" % (n + 1), "P%dDuetSixP" % (n + 1)):
+            player(pre, lane3[n % 3], "P%dDark" % (n + 1), **(LEFT if n < 3 else RIGHT))
 
     # no avatar pictures in any layout
     for name in list(ini.sections):
@@ -623,7 +649,9 @@ def sing(b):
             ini.set(name, od(X=0, Y=0, W=0, H=0, Z=1, Alpha=0))
 
     # 3 or more players (no lanes): score and name with a soft shadow
-    own = ("P1", "P1TwoP", "P2R")
+    own = ["P1", "P1TwoP", "P2R", "P1ThreeP", "P2M", "P3R", "DuetP1ThreeP", "DuetP2M", "DuetP3R"]
+    own += ["P%d%sP" % (n, k) for n in range(1, 7) for k in ("Four", "Six", "DuetFour", "DuetSix")]
+    own += ["P%dDuet%sP" % (n, k) for n in range(1, 7) for k in ("Four", "Six")]
     for name in list(ini.sections):
         m = re.match(r"^Sing(\w+)Static2$", name)
         if not m or m.group(1) in own or m.group(1) == "Default":
@@ -692,52 +720,74 @@ def score(b):
     ini.set("ScoreBars", od(Instant=1))      # the bars and points appear at once
     ini.set("ScoreTextArtistTitle", text_section("ArtistTitle", W - M, 26, 16, "Text2", align=2))
 
-    def card(n, cx, cy, cw, ch, pcol):
+    def card(n, cx, cy, cw, ch, pcol, pre="", compact=False):
+        """One player's card. pre is "" (1-3 players), "FourP" or "SixP": the
+        game loads its own set of sections for 4 and 6 players on one screen,
+        laid out as a grid, hence the smaller (compact) card."""
+        S = "Score" + pre
         bar_w = 56 if cw > 450 else 40
-        bx = cx + cw - 28 - bar_w
-        inner = bx - 24 - (cx + 28)          # width of the left column
+        if compact:
+            bar_w = 32 if cw > 450 else 28
+        bx = cx + cw - (20 if compact else 28) - bar_w
+        lx = cx + (20 if compact else 28)    # left edge of the content
+        inner = bx - 24 - lx                 # width of the left column
         big = cw > 450
-        ini.set("ScorePlayer%dStatic1" % n, od(X=cx, Y=cy, W=cw, H=ch, Z=0.1, Tex=a.panel(cw, ch, 24),
-                                               Color="Surface", Type="Transparent"))
-        ini.set("ScorePlayer%dStatic2" % n, od(X=cx + 28, Y=cy + 28, W=56, H=56, Z=0.9, Tex=a.circle(56),
-                                               Color=pcol, Type="Transparent"))
-        ini.set("ScorePlayer%dAvatar" % n, od(X=cx + 32, Y=cy + 32, W=0, H=0, Z=1))
-        ini.set("ScoreTextName%d" % n, text_section("P%d" % n, cx + 100, cy + 38, 26, "Text", font=FONT_DISPLAY))
-        ini.set("ScoreTextTotal%d" % n, text_section("SING_TOTAL", cx + 28, cy + 112, 15, "Text3"))
-        ini.set("ScoreTextTotalSCore%d" % n, text_section("00000", cx + 28, cy + 134, 72 if big else 54, "Text",
-                                                           font=FONT_MONO))
-        ini.set("ScoreStaticRatingPicture%d" % n, od(X=cx + 28, Y=cy + 238, W=inner, H=12, Z=0.85))
-        ini.set("ScoreTextScore%d" % n, od(X=cx + 28, Y=cy + 260, W=inner, Color="Text", Font=FONT_DISPLAY,
-                                           Style=REGULAR, Size=26 if big else 22, Text="Tone Deaf", Align=0))
+        ini.set("%sPlayer%dStatic1" % (S, n), od(X=cx, Y=cy, W=cw, H=ch, Z=0.1, Tex=a.panel(cw, ch, 24),
+                                                Color="Surface", Type="Transparent"))
+        if compact:
+            ini.set("%sPlayer%dStatic2" % (S, n), od(X=lx, Y=cy + 18, W=44, H=44, Z=0.9, Tex=a.circle(44),
+                                                    Color=pcol, Type="Transparent"))
+            ini.set("%sPlayer%dAvatar" % (S, n), od(X=lx + 4, Y=cy + 22, W=0, H=0, Z=1))
+            ini.set("%sTextName%d" % (S, n), text_section("P%d" % n, lx + 58, cy + 24, 22, "Text", font=FONT_DISPLAY))
+            ini.set("%sTextTotal%d" % (S, n), text_section("SING_TOTAL", lx, cy + 74, 13, "Text3"))
+            ini.set("%sTextTotalScore%d" % (S, n), text_section("00000", lx, cy + 90, 38 if big else 34, "Text",
+                                                               font=FONT_MONO))
+            ini.set("%sStaticRatingPicture%d" % (S, n), od(X=lx, Y=cy + 138, W=inner, H=8, Z=0.85))
+            ini.set("%sTextScore%d" % (S, n), od(X=lx, Y=cy + 150, W=inner, Color="Text", Font=FONT_DISPLAY,
+                                                 Style=REGULAR, Size=18 if big else 16, Text="Tone Deaf", Align=0))
+            row0, step, ls_, vs_ = cy + 182, 24, 15, 15
+        else:
+            ini.set("%sPlayer%dStatic2" % (S, n), od(X=cx + 28, Y=cy + 28, W=56, H=56, Z=0.9, Tex=a.circle(56),
+                                                    Color=pcol, Type="Transparent"))
+            ini.set("%sPlayer%dAvatar" % (S, n), od(X=cx + 32, Y=cy + 32, W=0, H=0, Z=1))
+            ini.set("%sTextName%d" % (S, n), text_section("P%d" % n, cx + 100, cy + 38, 26, "Text", font=FONT_DISPLAY))
+            ini.set("%sTextTotal%d" % (S, n), text_section("SING_TOTAL", cx + 28, cy + 112, 15, "Text3"))
+            ini.set("%sTextTotalScore%d" % (S, n), text_section("00000", cx + 28, cy + 134, 72 if big else 54,
+                                                               "Text", font=FONT_MONO))
+            ini.set("%sStaticRatingPicture%d" % (S, n), od(X=cx + 28, Y=cy + 238, W=inner, H=12, Z=0.85))
+            ini.set("%sTextScore%d" % (S, n), od(X=cx + 28, Y=cy + 260, W=inner, Color="Text", Font=FONT_DISPLAY,
+                                                 Style=REGULAR, Size=26 if big else 22, Text="Tone Deaf", Align=0))
+            row0, step, ls_, vs_ = cy + 330, 46, 17, 18
         rows = (("Notes", "SING_NOTES", "BoxDark", "ScoreBar_box_dark"),
                 ("LineBonus", "SING_PHRASE_BONUS", "BoxLight", "ScoreBar_box_light"),
                 ("GoldenNotes", "SING_GOLDEN_NOTES", "BoxLightest", "ScoreBar_box_lightest"))
         for i, (key, label, box, tex) in enumerate(rows):
-            y = cy + 330 + i * 46
-            ini.set("ScoreStatic%s%d" % (box, n), od(Tex=tex, X=cx + 28, Y=y + 4, W=12, H=12, Color=pcol,
-                                                      Type="Colorized"))
-            ini.set("ScoreText%s%d" % (key, n), text_section(label, cx + 50, y, 17, "Text2"))
-            ini.set("ScoreText%sScore%d" % (key, n), text_section("0000", cx + 28 + inner, y - 1, 18, "Text",
+            y = row0 + i * step
+            ini.set("%sStatic%s%d" % (S, box, n), od(Tex=tex, X=lx, Y=y + (3 if compact else 4), W=12 if not compact else 10,
+                                                    H=12 if not compact else 10, Color=pcol, Type="Colorized"))
+            ini.set("%sText%s%d" % (S, key, n), text_section(label, lx + (22 if compact else 22), y, ls_, "Text2"))
+            ini.set("%sText%sScore%d" % (S, key, n), text_section("0000", lx + inner, y - 1, vs_, "Text",
                                                                   font=FONT_MONO, align=2))
             if i < 2:
-                ini.set("ScorePlayer%dStatic%d" % (n, 3 + i), od(X=cx + 28, Y=y + 32, W=inner, H=1, Z=0.5,
-                                                                 Tex=a.rect(), Color="Divider", Type="Transparent"))
+                ini.set("%sPlayer%dStatic%d" % (S, n, 3 + i), od(X=lx, Y=y + (step - 6 if compact else 32), W=inner,
+                                                                 H=1, Z=0.5, Tex=a.rect(), Color="Divider",
+                                                                 Type="Transparent"))
         # the animated bar: track + fill (re-hued with the player colour)
-        top, bh = cy + 28, ch - 56
+        top, bh = cy + (18 if compact else 28), ch - (36 if compact else 56)
         # the track is a plain static (the game does not draw BackLevel);
         # its Z puts it below the bars, which the game draws itself
-        ini.set("ScorePlayer%dStatic5" % n, od(X=bx, Y=top, W=bar_w, H=bh, Z=0.2, Tex=a.panel(bar_w, bh, 12),
-                                               Color="Surface3", Type="Transparent"))
-        ini.set("ScoreStaticBackLevel%d" % n, od(Tex=a.panel(bar_w, bh, 12), X=bx, Y=top, W=bar_w, H=bh,
-                                                  Color="Surface3", Type="Transparent"))
-        ini.set("ScoreStaticBackLevelRound%d" % n, od(Tex=a.transparent(), X=bx, Y=top, W=bar_w, H=1,
-                                                       Color="Surface3", Type="Transparent"))
-        ini.set("ScoreStaticLevel%d" % n, od(Tex="ScoreLevel", X=bx, Y=top + bh - 10, W=bar_w, H=10, Color=pcol,
-                                              Type="Colorized"))
-        ini.set("ScoreStaticLevelRound%d" % n, od(Tex=a.transparent(), X=bx, Y=top + bh - 10, W=bar_w, H=1,
-                                                   Color=pcol, Type="Transparent"))
+        ini.set("%sPlayer%dStatic5" % (S, n), od(X=bx, Y=top, W=bar_w, H=bh, Z=0.2, Tex=a.panel(bar_w, bh, 12),
+                                                Color="Surface3", Type="Transparent"))
+        ini.set("%sStaticBackLevel%d" % (S, n), od(Tex=a.panel(bar_w, bh, 12), X=bx, Y=top, W=bar_w, H=bh,
+                                                   Color="Surface3", Type="Transparent"))
+        ini.set("%sStaticBackLevelRound%d" % (S, n), od(Tex=a.transparent(), X=bx, Y=top, W=bar_w, H=1,
+                                                        Color="Surface3", Type="Transparent"))
+        ini.set("%sStaticLevel%d" % (S, n), od(Tex="ScoreLevel", X=bx, Y=top + bh - 10, W=bar_w, H=10, Color=pcol,
+                                               Type="Colorized"))
+        ini.set("%sStaticLevelRound%d" % (S, n), od(Tex=a.transparent(), X=bx, Y=top + bh - 10, W=bar_w, H=1,
+                                                    Color=pcol, Type="Transparent"))
         # send-score button (only with score websites)
-        btn = ini.get("ScoreButtonSend%d" % n)
+        btn = ini.get("ScoreButtonSend%d" % n) if not pre else None
         if btn is not None:
             ini.set("ScoreButtonSend%d" % n, od(X=cx + 28, Y=cy + ch - 70, W=200, H=40, Tex=a.panel(200, 40, 12),
                                                 Color="Accent", DColor="Surface3", Type="Transparent", Texts=1))
@@ -751,6 +801,19 @@ def score(b):
     cw3 = (W - 2 * M - 2 * 20) // 3                           # 3 players
     for i in range(3):
         card(4 + i, M + i * (cw3 + 20), cy, cw3, ch, "P%dDark" % (i + 1))
+
+    # 4 and 6 players on one screen: the game loads other sections for them
+    # (ScoreFourP*, ScoreSixP*), as a 2 x 2 and a 3 x 2 grid of smaller cards
+    ini.remove_prefix("ScoreFourP", keep=())
+    ini.remove_prefix("ScoreSixP", keep=())
+    gap, gh = 20, 256
+    cw4 = (W - 2 * M - gap) // 2
+    for n in range(4):                       # P1 P2 on the top row, P3 P4 below
+        card(n + 1, M + (n % 2) * (cw4 + gap), cy + (n // 2) * (gh + gap), cw4, gh, "P%dDark" % (n + 1),
+             pre="FourP", compact=True)
+    for n in range(6):                       # P1 P2 P3 on the top row, P4 P5 P6 below
+        card(n + 1, M + (n % 3) * (cw3 + gap), cy + (n // 3) * (gh + gap), cw3, gh, "P%dDark" % (n + 1),
+             pre="SixP", compact=True)
 
     ini.set("ScoreStaticNavigate", od(X=M + 160, Y=FOOT_Y + 20, W=b.key_w["ButtonNavi"], H=24, Tex="ButtonNavi",
                                       Color="Text2", Type="Transparent", Z=0.5))
@@ -1219,8 +1282,9 @@ def build(b):
             kv.setdefault("Font", str(FONT_INTER))
             kv.setdefault("Style", str(REGULAR))
             kv["ArrowTint"] = "1"
-    # select slide arrows: drawn at the size of the icons
+    # select slide arrows: a bit smaller than the icons, away from the edges
     for name, kv in b.ini.sections.items():
         if "ArrowW" in kv or name.endswith("SelectSlide"):
-            kv["ArrowW"] = "24"
-            kv["ArrowH"] = "24"
+            kv["ArrowW"] = "20"
+            kv["ArrowH"] = "20"
+            kv["ArrowInset"] = "12"

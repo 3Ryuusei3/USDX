@@ -162,6 +162,8 @@ type
     FadeOut: boolean;
 
     procedure ClearSettings;
+    procedure PlaceDuetLyrics;
+    function DuetLyricsBelow: boolean;
     procedure AllNotesVisible(visible: boolean);
     procedure ApplySettings; //< applies changes of settings record
     procedure EndSong;
@@ -732,7 +734,8 @@ begin
 
   {for I := 0 to High(screenSingViewRef.StaticDuet) do
     Statics[screenSingViewRef.StaticDuet[I]].Visible := CurrentSong.isDuet and (PlayersPlay > 1);}
-  Statics[screenSingViewRef.StaticLyricsBarDuet].Visible := CurrentSong.isDuet and (PlayersPlay > 1);
+  PlaceDuetLyrics;
+  Statics[screenSingViewRef.StaticLyricsBarDuet].Visible := CurrentSong.isDuet and (PlayersPlay > 1) and not DuetLyricsBelow;
 
   Statics[screenSingViewRef.SongNameStatic].Visible := false;
   Text[screenSingViewRef.SongNameText].Visible := false;
@@ -1344,6 +1347,49 @@ begin
     fStartTime := fFirstNote - MINIMUM_START_TIME
   else
     fStartTime := CurrentSong.Start;
+end;
+
+{ the lyrics of a duet: the middle bar between the two lanes of a 2 player
+  game; with more players the rows fill that space and both lyrics go side by
+  side in the lower bar (theme: [SingNoteArea] Duet3Lyrics) }
+function TScreenSingController.DuetLyricsBelow: boolean;
+begin
+  Result := Theme.Sing.NoteArea.Duet3Lyrics and (CurrentSong <> nil) and CurrentSong.isDuet and
+            (PlayersPlay > 2);
+end;
+
+procedure TScreenSingController.PlaceDuetLyrics;
+var
+  UW, LW: real;
+begin
+  if (LyricsDuetP1 = nil) or (LyricsDuetP2 = nil) then
+    Exit;
+  if DuetLyricsBelow then
+  begin
+    UW := Theme.LyricBar.UpperW / 2 - 12;
+    LW := Theme.LyricBar.LowerW / 2 - 12;
+    LyricsDuetP1.UpperLineX := Theme.LyricBar.UpperX;
+    LyricsDuetP1.LowerLineX := Theme.LyricBar.LowerX;
+    LyricsDuetP2.UpperLineX := Theme.LyricBar.UpperX + UW + 24;
+    LyricsDuetP2.LowerLineX := Theme.LyricBar.LowerX + LW + 24;
+    LyricsDuetP1.UpperLineW := UW;  LyricsDuetP2.UpperLineW := UW;
+    LyricsDuetP1.LowerLineW := LW;  LyricsDuetP2.LowerLineW := LW;
+    LyricsDuetP1.UpperLineY := Theme.LyricBar.UpperY;  LyricsDuetP2.UpperLineY := Theme.LyricBar.UpperY;
+    LyricsDuetP1.UpperLineH := Theme.LyricBar.UpperH;  LyricsDuetP2.UpperLineH := Theme.LyricBar.UpperH;
+    LyricsDuetP1.LowerLineY := Theme.LyricBar.LowerY;  LyricsDuetP2.LowerLineY := Theme.LyricBar.LowerY;
+    LyricsDuetP1.LowerLineH := Theme.LyricBar.LowerH;  LyricsDuetP2.LowerLineH := Theme.LyricBar.LowerH;
+  end
+  else
+  begin
+    LyricsDuetP1.UpperLineX := Theme.LyricBarDuetP1.UpperX; LyricsDuetP1.UpperLineW := Theme.LyricBarDuetP1.UpperW;
+    LyricsDuetP1.UpperLineY := Theme.LyricBarDuetP1.UpperY; LyricsDuetP1.UpperLineH := Theme.LyricBarDuetP1.UpperH;
+    LyricsDuetP1.LowerLineX := Theme.LyricBarDuetP1.LowerX; LyricsDuetP1.LowerLineW := Theme.LyricBarDuetP1.LowerW;
+    LyricsDuetP1.LowerLineY := Theme.LyricBarDuetP1.LowerY; LyricsDuetP1.LowerLineH := Theme.LyricBarDuetP1.LowerH;
+    LyricsDuetP2.UpperLineX := Theme.LyricBarDuetP2.UpperX; LyricsDuetP2.UpperLineW := Theme.LyricBarDuetP2.UpperW;
+    LyricsDuetP2.UpperLineY := Theme.LyricBarDuetP2.UpperY; LyricsDuetP2.UpperLineH := Theme.LyricBarDuetP2.UpperH;
+    LyricsDuetP2.LowerLineX := Theme.LyricBarDuetP2.LowerX; LyricsDuetP2.LowerLineW := Theme.LyricBarDuetP2.LowerW;
+    LyricsDuetP2.LowerLineY := Theme.LyricBarDuetP2.LowerY; LyricsDuetP2.LowerLineH := Theme.LyricBarDuetP2.LowerH;
+  end;
 end;
 
 procedure TScreenSingController.ClearSettings;

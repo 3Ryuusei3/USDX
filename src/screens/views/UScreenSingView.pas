@@ -738,6 +738,32 @@ begin
     FitNameBox(StaticP1[0], TextP1);
     FitNameBox(StaticP1TwoP[0], TextP1TwoP);
     FitNameBox(StaticP2R[0], TextP2R);
+    FitNameBox(StaticP1ThreeP[0], TextP1ThreeP);
+    FitNameBox(StaticP2M[0], TextP2M);
+    FitNameBox(StaticP3R[0], TextP3R);
+    FitNameBox(StaticDuetP1ThreeP[0], TextDuetP1ThreeP);
+    FitNameBox(StaticDuetP2M[0], TextDuetP2M);
+    FitNameBox(StaticDuetP3R[0], TextDuetP3R);
+    FitNameBox(StaticP1FourP, TextP1FourP);
+    FitNameBox(StaticP2FourP, TextP2FourP);
+    FitNameBox(StaticP3FourP, TextP3FourP);
+    FitNameBox(StaticP4FourP, TextP4FourP);
+    FitNameBox(StaticP1DuetFourP, TextP1DuetFourP);
+    FitNameBox(StaticP2DuetFourP, TextP2DuetFourP);
+    FitNameBox(StaticP3DuetFourP, TextP3DuetFourP);
+    FitNameBox(StaticP4DuetFourP, TextP4DuetFourP);
+    FitNameBox(StaticP1SixP, TextP1SixP);
+    FitNameBox(StaticP2SixP, TextP2SixP);
+    FitNameBox(StaticP3SixP, TextP3SixP);
+    FitNameBox(StaticP4SixP, TextP4SixP);
+    FitNameBox(StaticP5SixP, TextP5SixP);
+    FitNameBox(StaticP6SixP, TextP6SixP);
+    FitNameBox(StaticP1DuetSixP, TextP1DuetSixP);
+    FitNameBox(StaticP2DuetSixP, TextP2DuetSixP);
+    FitNameBox(StaticP3DuetSixP, TextP3DuetSixP);
+    FitNameBox(StaticP4DuetSixP, TextP4DuetSixP);
+    FitNameBox(StaticP5DuetSixP, TextP5DuetSixP);
+    FitNameBox(StaticP6DuetSixP, TextP6DuetSixP);
   end;
 
   // sound enabled/disabled (Party plugins)
@@ -1011,7 +1037,7 @@ begin
 
   // always draw custom items
   ScreenSing.Statics[StaticLyricsBar].Visible := ScreenSing.Settings.LyricsVisible;
-  ScreenSing.Statics[StaticLyricsBarDuet].Visible := ScreenSing.Settings.LyricsVisible and (CurrentSong.isDuet) and (PlayersPlay <> 1);
+  ScreenSing.Statics[StaticLyricsBarDuet].Visible := ScreenSing.Settings.LyricsVisible and (CurrentSong.isDuet) and (PlayersPlay <> 1) and not ScreenSing.DuetLyricsBelow;
   ScreenSing.Statics[StaticTimeBar].Visible := ScreenSing.Settings.TimeBarVisible;
   SingDraw;
 

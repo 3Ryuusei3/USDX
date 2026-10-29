@@ -243,6 +243,7 @@ begin
   Display.CurrentScreen := @ScreenOptionsThemes;
 
   ScreenOptionsThemes.Interaction    := self.Interaction;
+  ScreenOptionsThemes.SnapAnimations;
   ScreenOptionsThemes.Draw;
 
   Display.Draw;

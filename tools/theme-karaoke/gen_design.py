@@ -6,6 +6,7 @@ import re
 import sys
 
 OUT = sys.argv[1]
+ONLY = set(sys.argv[2:])      # names of the artboards to write (none: all)
 SRC = open(os.path.join(OUT, "Main.dc.html"), encoding="utf-8").read()
 # the theme helper of the existing artboards (base colour -> tokens)
 THEME_JS = SRC[SRC.index("function makeTheme"):SRC.index("class Component")]
@@ -237,10 +238,21 @@ def players():
 
 
 # ---------------------------------------------------------------------------
-def sing():
-    LS = 18
-    b = []
-    # stand-in for the music video
+SING_SHAPE = [(0, 6, 110), (122, 5, 60), (194, 4, 140), (346, 3, 80, True), (438, 4, 64), (514, 6, 120), (646, 7, 70),
+              (740, 5, 150, True), (910, 6, 90), (1012, 4, 140)]
+# the player colours of the game (P1 blue, P2 gold, ...): a light one shows
+# the dark name text, as the game picks it by luminance
+PLAYERS = [("Manuel", P["blue"]), ("Lucía", P["mint"]), ("Pablo", P["gold"]), ("Marta", P["pink"]),
+           ("Íñigo", P["violet"]), ("Ana", P["blue"])]
+
+
+def ink_on(col):
+    r, g, b_ = (int(col[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    return "#0E0F12" if 0.2126 * r + 0.7152 * g + 0.0722 * b_ > 0.5 else "#F2F2EF"
+
+
+def video_backdrop(b):
+    """stand-in for the music video + progress line + time chip"""
     b.append('''<div aria-hidden="true">
 <div style="position: absolute; inset: 0; background: {{v.sky}}"></div>
 <div style="position: absolute; left: 860px; top: 120px; width: 260px; height: 260px; border-radius: 130px; background: {{v.sun}}"></div>
@@ -249,62 +261,100 @@ def sing():
 <div style="position: absolute; left: 470px; top: 236px; width: 70px; height: 70px; border-radius: 35px; background: {{v.figure}}"></div>
 <div style="position: absolute; left: 440px; top: 300px; width: 130px; height: 260px; border-radius: 60px 60px 0 0; background: {{v.figure}}"></div>
 </div>''')
-    # progress line + time chip
     b.append(f'<div style="{ab(0, 0, 1280, 4)} background: rgba(14,15,18,0.7)"><div style="width: 38%; height: 4px; background: {ACC}"></div></div>')
     b.append(f'<div style="{ab(1136, 18, 112, 34)} border-radius: 17px; background: rgba(14,15,18,0.92); color: #F2F2EF; {MONO}; font-size: 15px; display: flex; align-items: center; justify-content: center">-02:18</div>')
 
-    shape = [(0, 6, 110), (122, 5, 60), (194, 4, 140), (346, 3, 80, True), (438, 4, 64), (514, 6, 120), (646, 7, 70),
-             (740, 5, 150, True), (910, 6, 90), (1012, 4, 140)]
-    lanes = [("Manuel", P["blue"], "4.120", 0.8, 92, "¡Genial!", ["hit", "hit", "hit", "hit"]),
-             ("Lucía", P["mint"], "3.065", 0.5, 408, None, ["hit", "miss", "hit", "miss"])]
-    cursor = 470
-    for name, col, score, level, top, bonus, states in lanes:
-        b.append(f'<section aria-label="{name}" style="{ab(0, 0)}">')
-        # staff lines (no veil behind the notes)
-        for i in range(10):
-            b.append(f'<div style="{ab(56, top + 10 + i * LS, 1168, 1)} background: rgba(242,242,239,0.18)" aria-hidden="true"></div>')
-        for k, n in enumerate(shape):
-            x, row, w = n[0], n[1], n[2]
-            gold = len(n) > 3
-            y = top + 10 + row * LS - 8
-            st = states[k] if k < 4 else ("current" if k == 4 else "future")
-            if st == "hit":
-                bg = P["gold"] if gold else col
-            elif st == "miss":
-                bg = "rgba(14,15,18,0.85)"
-            else:
-                bg = "color-mix(in srgb, " + P["gold"] + " 55%, #5E5E5E)" if gold else "#5E5E5E"
-            inner = ""
-            if st == "current":
-                inner = f'<div style="position: absolute; left: 0; top: 0; height: 16px; width: {cursor - x}px; border-radius: 8px; background: {col}"></div>'
-            hgt = 16 if st != "miss" else 13
-            b.append(f'<div style="{ab(80 + x, y + (16 - hgt) // 2, w, hgt)} border-radius: 8px; overflow: hidden; background: {bg}; {NOTE_SHADOW}" aria-hidden="true">{inner}</div>')
-        # row just above the staff: the name in a box of the player's colour
-        # at the left end; sing bar and score (soft shadow) at the right end
-        rt = top - 32
-        ink = "#0E0F12" if col in (P["mint"], P["gold"]) else "#F2F2EF"
-        b.append(f'<span style="{ab(56, rt + 2)} height: 28px; padding: 0 10px; border-radius: 8px; background: {col}; color: {ink}; font-size: 17px; font-weight: 600; display: inline-flex; align-items: center">{name}</span>')
-        b.append(f'<div style="{ab(1042, rt + 12, 110, 8)} border-radius: 4px; background: rgba(14,15,18,0.55); overflow: hidden" aria-hidden="true"><div style="width: {int(level * 100)}%; height: 8px; background: {col}"></div></div>')
-        b.append(f'<span style="{ab(1166, rt + 1)} {MONO}; font-weight: 700; font-size: 24px; color: #F2F2EF; {SHADOW_T}">{score}</span>')
-        if bonus:
-            b.append(f'<div style="{ab(877, rt + 2, 150, 28)} border-radius: 14px; background: color-mix(in srgb, {ACC} 35%, #0E0F12); border: 1.5px solid {ACC}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; color: #F2F2EF">{bonus}</div>')
-        b.append('</section>')
-    # lyrics: duet bar between the lanes, main bar at the bottom
-    def lyrics(y, h, sung, rest, nxt, col, big):
-        return (f'<section aria-label="Letra" style="{ab(32, y, 1216, h)} border-radius: 22px; background: #0E0F12; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px">'
-                f'<p style="margin: 0; {DISPLAY}; font-weight: 600; font-size: {big}px; letter-spacing: -0.01em"><span style="color: {col}">{sung}</span><span style="color: #F2F2EF">{rest}</span></p>'
-                f'<p style="margin: 0; font-size: {big - 12}px; font-weight: 600; color: #8E8E8E">{nxt}</p></section>')
-    b.append(lyrics(278, 92, "Bajo las lu", "ces de neón", "bailamos sin pensar en volver", P["blue"], 32))
-    b.append(lyrics(596, 104, "Bajo las ", "luces de neón", "bailamos sin pensar en volver", P["mint"], 36))
+
+def lane(b, name, col, score, level, x0, x1, top, ls, hud_right, states, bonus=None):
+    """One player: a name row (the name in a pill of its colour at the right
+    end, the score with its bar to the left of it) above a staff of notes.
+    x0..x1 is the staff, top the top of the lane (the row sits 40 px above)."""
+    f = (x1 - x0) / 1168
+    h = round(ls * 0.9)
+    cursor = x0 + 24 + round(470 * f)
+    b.append(f'<section aria-label="{name}" style="{ab(0, 0)}">')
+    for i in range(10):
+        b.append(f'<div style="{ab(x0, top + 10 + i * ls, x1 - x0, 1)} background: rgba(242,242,239,0.18)" aria-hidden="true"></div>')
+    for k, n in enumerate(SING_SHAPE):
+        gold = len(n) > 3
+        nx, nw = x0 + 24 + round(n[0] * f), max(14, round(n[2] * f))
+        st = states[k] if k < len(states) else ("current" if k == 4 else "future")
+        if st == "hit":
+            bg = P["gold"] if gold else col
+        elif st == "miss":
+            bg = "rgba(14,15,18,0.85)"
+        else:
+            bg = "color-mix(in srgb, " + P["gold"] + " 55%, #5E5E5E)" if gold else "#5E5E5E"
+        hgt = h if st != "miss" else round(h * 0.8)
+        y = top + 10 + n[1] * ls - hgt // 2
+        inner = ""
+        if st == "current":
+            inner = f'<div style="position: absolute; left: 0; top: 0; height: {hgt}px; width: {max(0, cursor - nx)}px; border-radius: 8px; background: {col}"></div>'
+        b.append(f'<div style="{ab(nx, y, nw, hgt)} border-radius: 8px; overflow: hidden; background: {bg}; {NOTE_SHADOW}" aria-hidden="true">{inner}</div>')
+    rt = top - 40
+    px, sx = hud_right - 112, hud_right - 170
+    b.append(f'<span style="{ab(px, rt + 2, 112, 28)} border-radius: 14px; background: {col}; color: {ink_on(col)}; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap">{name}</span>')
+    b.append(f'<span style="{ab(sx, rt + 5)} {MONO}; font-weight: 700; font-size: 22px; color: #F2F2EF; {SHADOW_T}">{score}</span>')
+    b.append(f'<div style="{ab(sx, rt + 29, 50, 4)} border-radius: 2px; background: rgba(14,15,18,0.55); overflow: hidden" aria-hidden="true"><div style="width: {int(level * 100)}%; height: 4px; background: {col}"></div></div>')
+    if bonus:
+        b.append(f'<div style="{ab(sx - 8 - 150, rt + 2, 150, 28)} border-radius: 14px; background: color-mix(in srgb, {ACC} 35%, #0E0F12); border: 1.5px solid {ACC}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; color: #F2F2EF">{bonus}</div>')
+    b.append('</section>')
+
+
+def lyrics_bar(y, h, sung, rest, nxt, col, big):
+    return (f'<section aria-label="Letra" style="{ab(32, y, 1216, h)} border-radius: 22px; background: #0E0F12; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px">'
+            f'<p style="margin: 0; {DISPLAY}; font-weight: 600; font-size: {big}px; letter-spacing: -0.01em"><span style="color: {col}">{sung}</span><span style="color: #F2F2EF">{rest}</span></p>'
+            f'<p style="margin: 0; font-size: {big - 12}px; font-weight: 600; color: #8E8E8E">{nxt}</p></section>')
+
+
+def sing_page(title, fname, b):
     extra_vals = ("const bright = (this.props.video ?? 'Vídeo claro') === 'Vídeo claro';\n"
                   "    const extra = bright ? { sky: '#F4A261', sun: '#FFE8A3', hill1: '#E76F51', hill2: '#C4513C', figure: '#2A1E2E' }\n"
                   "      : { sky: '#1B1F2A', sun: '#2C3347', hill1: '#161A23', hill2: '#12151D', figure: '#0B0D12' };")
-    html = page("Cantando", root("\n".join(b)).replace("{{v.", "{{extra."), extra_vals=extra_vals,
+    html = page(title, root("\n".join(b)).replace("{{v.", "{{extra."), extra_vals=extra_vals,
                 props=('{"accent":{"editor":"color","default":"#FF5A36","options":["#FF5A36","#4F9DFF","#2FD39A","#F2F2EF"]},'
                        '"video":{"editor":"enum","options":["Vídeo claro","Vídeo oscuro"],"default":"Vídeo claro"},'
                        '"base":{"editor":"color","default":"#0E0F12","options":["#0E0F12","#14213D","#2A1B3D","#F4F1EA"]},'
                        '"$preview":{"width":1280,"height":720}}'))
-    write("Sing.dc.html", html)
+    write(fname, html)
+
+
+def sing():
+    """duet, 2 players: a lane each, the duet lyrics between them"""
+    b = []
+    video_backdrop(b)
+    lane(b, *PLAYERS[0][:2], "4.120", 0.8, 56, 1224, 92, 16, 1224, ["hit", "hit", "hit", "hit"], bonus="¡Genial!")
+    lane(b, *PLAYERS[1][:2], "3.065", 0.5, 56, 1224, 408, 16, 1224, ["hit", "miss", "hit", "miss"])
+    # lyrics: duet bar between the lanes, main bar at the bottom
+    b.append(lyrics_bar(260, 104, "Bajo las lu", "ces de neón", "bailamos sin pensar en volver", P["blue"], 32))
+    b.append(lyrics_bar(596, 104, "Bajo las ", "luces de neón", "bailamos sin pensar en volver", P["mint"], 36))
+    sing_page("Cantando", "Sing.dc.html", b)
+
+
+def sing_multi():
+    """3 players (a full width row each), 4 (2 x 2) and 6 (3 x 2): the rows
+    of the 2 player layout with a smaller staff, as UDraw places them"""
+    scores = ["4.120", "3.065", "5.340", "2.870", "3.910", "4.455"]
+    levels = [0.8, 0.5, 0.65, 0.35, 0.55, 0.7]
+    states = [["hit"] * 4, ["hit", "miss", "hit", "miss"], ["hit", "hit", "miss", "hit"]] * 2
+    rows3 = [100, 270, 440]          # lane tops with 3 rows (staff spacing 12)
+    rows2 = [92, 408]                # with 2 rows (spacing 16)
+    full = dict(x0=56, x1=1224, hud_right=1224)
+    left = dict(x0=56, x1=625, hud_right=616)
+    right = dict(x0=630, x1=1224, hud_right=1224)
+    layouts = (("Sing3.dc.html", "Cantando · 3 jugadores", [(0, full, rows3[0], 12), (1, full, rows3[1], 12), (2, full, rows3[2], 12)]),
+               ("Sing4.dc.html", "Cantando · 4 jugadores", [(0, left, rows2[0], 16), (1, left, rows2[1], 16),
+                                                           (2, right, rows2[0], 16), (3, right, rows2[1], 16)]),
+               ("Sing6.dc.html", "Cantando · 6 jugadores", [(0, left, rows3[0], 12), (1, left, rows3[1], 12), (2, left, rows3[2], 12),
+                                                           (3, right, rows3[0], 12), (4, right, rows3[1], 12), (5, right, rows3[2], 12)]))
+    for fname, title, cells in layouts:
+        b = []
+        video_backdrop(b)
+        for n, g, top, ls in cells:
+            lane(b, PLAYERS[n][0], PLAYERS[n][1], scores[n], levels[n], g["x0"], g["x1"], top, ls, g["hud_right"], states[n],
+                 bonus="¡Genial!" if n == 0 else None)
+        b.append(lyrics_bar(596, 104, "Bajo las ", "luces de neón", "bailamos sin pensar en volver", P["blue"], 36))
+        sing_page(title, fname, b)
 
 
 # ---------------------------------------------------------------------------
@@ -479,9 +529,16 @@ def loading():
     write("Loading.dc.html", page("Pantalla de carga", root("\n".join(b))))
 
 
+if ONLY:                       # e.g. `gen_design.py <dir> sing`
+    if "sing" in ONLY:
+        sing()
+        sing_multi()
+    sys.exit(0)
+
 main_menu()
 players()
 sing()
+sing_multi()
 roulette()
 grid()
 song_list()

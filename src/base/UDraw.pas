@@ -1313,14 +1313,19 @@ var
   NR: TRecR;         // lyrics area bounds (NR = NoteRec?)
   LS, LS3: integer;  // line spacing for 1-2 and 3 rows
   T3: array[1..3] of real; // top of the guide lines, 3 rows
+  Off3: integer;     // distance from the baseline of a row to its top guide line
 begin
   // positions (from the theme)
   GetNoteArea(NR);
   LS  := Theme.Sing.NoteArea.LineSpacing;
   LS3 := Theme.Sing.NoteArea.LineSpacing3;
-  T3[1] := Theme.Sing.NoteArea.Top3Rows1 - Round(LS3 * 95 / 12);
-  T3[2] := Theme.Sing.NoteArea.Top3Rows2 - Round(LS3 * 95 / 12);
-  T3[3] := Theme.Sing.NoteArea.Top3Rows3 - Round(LS3 * 95 / 12);
+  if (Theme.Sing.NoteArea.Guide3Offset >= 0) then
+    Off3 := Theme.Sing.NoteArea.Guide3Offset
+  else
+    Off3 := Round(LS3 * 95 / 12);
+  T3[1] := Theme.Sing.NoteArea.Top3Rows1 - Off3;
+  T3[2] := Theme.Sing.NoteArea.Top3Rows2 - Off3;
+  T3[3] := Theme.Sing.NoteArea.Top3Rows3 - Off3;
 
   // draw note-lines
 

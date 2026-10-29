@@ -76,6 +76,7 @@ type
       // font of the label and the values; arrows in the colour of the value
       FontFamily, FontStyle: integer;
       ArrowTint: boolean;
+      ArrowInset: integer;
 
       //whether to show one item or all that fit into the select
       oneItemOnly: boolean;      //default is false
@@ -169,6 +170,8 @@ type
       procedure SetSelect(Value: boolean);
       property Selected: boolean read SelectBool write SetSelect;
       procedure SetSelectOpt(Value: integer);
+      { jumps to the final look of the current state, without easing }
+      procedure SnapAnimation;
       property SelectedOption: integer read SelectOptInt write SetSelectOpt;
       procedure Draw; override;
       constructor Create(PosX, PosY, W, H, SkipX, SBGW, ColR, ColG, ColB, Int, DColR, DColG, DColB, DInt,
@@ -369,6 +372,13 @@ begin
   self.Tex_SelectS_ArrowR.Free;
   for I := Low(TextOpt) to High(TextOpt) do
     TextOpt[I].Free;
+end;
+
+procedure TSelectSlide.SnapAnimation;
+begin
+  // SetSelect already leaves the final colours in the textures
+  FocusTicks := 0;
+  ValueTicks := 0;
 end;
 
 procedure TSelectSlide.SetSelect(Value: boolean);
@@ -590,8 +600,8 @@ begin
   for I := Low(TextOpt) to High(TextOpt) do
     TextOpt[I].X := TextOpt[I].X + (PosX - self.PosX);
   Texture.X := PosX;
-  self.Tex_SelectS_ArrowL.X := PosX + Texture.W + SkipX;
-  self.Tex_SelectS_ArrowR.X := PosX + Texture.W + SkipX + SBGW - self.Tex_SelectS_ArrowR.W;
+  self.Tex_SelectS_ArrowL.X := PosX + Texture.W + SkipX + ArrowInset;
+  self.Tex_SelectS_ArrowR.X := PosX + Texture.W + SkipX + SBGW - self.Tex_SelectS_ArrowR.W - ArrowInset;
 
   TextureSBG.X := PosX + Texture.W + SkipX;
   Text.X := PosX + 20;
