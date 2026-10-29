@@ -168,7 +168,6 @@ upstream/master -> master                (identical to upstream, nothing of ours
       |-> redesign                       SuperStar theme + engine work + cover loader robustness
       |-> video-decode-thread            PR #1469 (video decode thread, already hardened)
       |-> translations                   spanish-translations (PR #1468) + one commit with the other languages
-      |-> seek-keys-cmd-mac-pr           PR #1470 (seek with Cmd on macOS)
       |-> medley-all-songs               medley for every song (personal, not sent upstream)
       |-> pass-the-mic                   "Pasar el micro" option (UPassMic, personal)
                   `-> develop = master + a merge of every branch above
@@ -179,13 +178,12 @@ upstream/master -> master                (identical to upstream, nothing of ours
   it (force-pushed once on 2026-10-29).
 - **Every topic branch starts from `master`** and is independent of the others, so
   each can be rebased on a new `master` or sent upstream on its own.
-- **PR branches are `spanish-translations`, `video-decode-thread`,
-  `seek-keys-cmd-mac-pr`.** They stay open against upstream: only push to them to
+- **PR branches are `spanish-translations` and `video-decode-thread`.** They stay open against upstream: only push to them to
   answer review. Extra work for the same area goes in a separate branch (that is
   why `translations` is stacked on `spanish-translations`).
 - **`develop` is only merges.** Never develop on it. After changing a topic branch
   or updating `master`, merge the branches into `develop` again (order: redesign,
-  video-decode-thread, seek-keys-cmd-mac-pr, translations, medley-all-songs,
+  video-decode-thread, translations, medley-all-songs,
   pass-the-mic). Both `redesign` and `pass-the-mic` add a line to the `uses` list of
   `src/ultrastardx.dpr`: keep both lines.
   `rerere` is on. The only recurring conflicts are in `game/languages/*.ini`
